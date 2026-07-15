@@ -1,0 +1,66 @@
+#!/bin/sh
+# Ensure the commit produced by the preceding git-commit stage has tests.
+#
+# This command is intended to be the final stage of a pipeline.  It delegates
+# the code/test assessment to the coding agent because deciding whether a
+# change is adequately covered requires understanding the changed behaviour.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf '%s\n' 'ensure-tests: not inside a Git work tree' >&2
+    exit 1
+}
+cd "$repo_root"
+
+# A pipeline starts every process at once.  Waiting for stdin to close means
+# git-commit (the preceding stage) has finished creating the commit before the
+# ensurer examines HEAD.  Do not pass that output to the agent.
+if [ ! -t 0 ]; then
+    cat >/dev/null
+fi
+
+if ! git rev-parse --verify HEAD^{commit} >/dev/null 2>&1; then
+    printf '%s\n' 'ensure-tests: no commit exists to inspect' >&2
+    exit 1
+fi
+
+prompt=$(cat <<'TASK'
+Inspect the immediately preceding commit (HEAD) and ensure its JavaScript
+changes are covered by both unit tests and feature/acceptance tests.  This is
+a test-ensurer pass after another agent has made a commit.
+
+First inspect the commit itself, including its parent diff (and handle a root
+commit too), and identify every meaningful
+JavaScript source change.  Do not infer coverage merely from the existence of
+a test file: reason about the changed behaviour and verify that tests exercise
+it.  Treat JavaScript source files such as *.js, *.mjs, and *.cjs as relevant;
+do not treat test files, generated dependencies, or configuration-only changes
+as application JavaScript changes.
+
+For each relevant application change, require both:
+* a focused unit test covering the underlying logic; and
+* a feature/acceptance test covering the externally observable behaviour.
+
+Use the existing project test conventions and tools.  If either kind of
+coverage is missing or inadequate, create or improve the smallest appropriate
+tests, including feature steps/support code when necessary.  Do not rewrite
+valid production code just to make the tests pass, and do not make unrelated
+changes.  Keep any pre-existing user worktree changes out of the commit.
+Run the relevant unit and feature test commands (and lint when practical).
+
+If the commit has no relevant application JavaScript changes, or already has
+adequate unit and feature coverage, leave HEAD and the worktree unchanged.
+If you added or changed tests for this commit, stage only those test changes
+(and any strictly necessary test configuration/support changes), amend HEAD,
+and retain the original commit message while adding this exact sentence to
+its body: "Amended by ensurer agent."  The amended commit must therefore
+explicitly tell readers that the ensurer agent amended it.  Never create a
+second follow-up commit, amend an earlier commit, or commit unrelated files.
+TASK
+)
+
+# The agent is intentionally detached from the pipeline's stdin.  The barrier
+# above provides synchronization without allowing the agent to consume the
+# preceding command's output.
+exec mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null
