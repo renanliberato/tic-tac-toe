@@ -1,9 +1,11 @@
 #!/bin/sh
-# Ensure the commit produced by the preceding git-commit stage has tests.
+# Ensure the commit produced by the preceding git-commit stage has tests and
+# passes the project's test and lint checks.
 #
-# This command is intended to be the final stage of a pipeline.  It delegates
-# the code/test assessment to the coding agent because deciding whether a
-# change is adequately covered requires understanding the changed behaviour.
+# This command is intended to be the final stage of a pipeline.  It first
+# delegates the code/test assessment to the coding agent, then runs the checks
+# itself.  Keeping the checks in this shell is important: an agent reporting
+# that it ran them is not sufficient for this stage to succeed.
 
 set -eu
 
@@ -25,42 +27,119 @@ if ! git rev-parse --verify HEAD^{commit} >/dev/null 2>&1; then
     exit 1
 fi
 
-prompt=$(cat <<'TASK'
+coverage_prompt=$(cat <<'TASK'
 Inspect the immediately preceding commit (HEAD) and ensure its JavaScript
-changes are covered by both unit tests and feature/acceptance tests.  This is
-a test-ensurer pass after another agent has made a commit.
+changes are covered by both unit tests and feature/acceptance tests. This is a
+test-ensurer pass after another agent has made a commit.
 
 First inspect the commit itself, including its parent diff (and handle a root
-commit too), and identify every meaningful
-JavaScript source change.  Do not infer coverage merely from the existence of
-a test file: reason about the changed behaviour and verify that tests exercise
-it.  Treat JavaScript source files such as *.js, *.mjs, and *.cjs as relevant;
-do not treat test files, generated dependencies, or configuration-only changes
-as application JavaScript changes.
+commit too), and identify every meaningful JavaScript source change. Do not
+infer coverage merely from the existence of a test file: reason about the
+changed behaviour and verify that tests exercise it. Treat JavaScript source
+files such as *.js, *.mjs, and *.cjs as relevant; do not treat test files,
+generated dependencies, or configuration-only changes as application
+JavaScript changes.
 
 For each relevant application change, require both:
 * a focused unit test covering the underlying logic; and
 * a feature/acceptance test covering the externally observable behaviour.
 
-Use the existing project test conventions and tools.  If either kind of
+Use the existing project test conventions and tools. If either kind of
 coverage is missing or inadequate, create or improve the smallest appropriate
-tests, including feature steps/support code when necessary.  Do not rewrite
+tests, including feature steps/support code when necessary. Do not rewrite
 valid production code just to make the tests pass, and do not make unrelated
-changes.  Keep any pre-existing user worktree changes out of the commit.
-Run the relevant unit and feature test commands (and lint when practical).
+changes. Keep any pre-existing user worktree changes out of the commit.
 
 If the commit has no relevant application JavaScript changes, or already has
 adequate unit and feature coverage, leave HEAD and the worktree unchanged.
 If you added or changed tests for this commit, stage only those test changes
 (and any strictly necessary test configuration/support changes), amend HEAD,
 and retain the original commit message while adding this exact sentence to
-its body: "Amended by ensurer agent."  The amended commit must therefore
-explicitly tell readers that the ensurer agent amended it.  Never create a
+its body: "Amended by ensurer agent." The amended commit must therefore
+explicitly tell readers that the ensurer agent amended it. Never create a
 second follow-up commit, amend an earlier commit, or commit unrelated files.
 TASK
 )
 
-# The agent is intentionally detached from the pipeline's stdin.  The barrier
+# The agent is intentionally detached from the pipeline's stdin. The barrier
 # above provides synchronization without allowing the agent to consume the
 # preceding command's output.
-exec mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null
+if ! mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$coverage_prompt" </dev/null; then
+    printf '%s\n' 'ensure-tests: coverage agent failed' >&2
+    exit 1
+fi
+
+# Keep the diagnostics from both commands together. The file is overwritten on
+# every attempt, so the fixing agent always receives the current failure output.
+check_output=$(mktemp "${TMPDIR:-/tmp}/ensure-tests-output.XXXXXX") || {
+    printf '%s\n' 'ensure-tests: could not create temporary output file' >&2
+    exit 1
+}
+cleanup() {
+    rm -f "$check_output"
+}
+trap cleanup 0
+
+run_checks() {
+    test_status=0
+    lint_status=0
+    : >"$check_output"
+
+    # Do not use set -e for either command: lint must still run when tests fail,
+    # and both exit statuses need to be reported to the fixing agent.
+    printf '%s\n' '--- ./test ---' >>"$check_output"
+    ./test >>"$check_output" 2>&1 || test_status=$?
+    printf '%s\n' "--- ./test exit status: $test_status ---" >>"$check_output"
+    printf '%s\n' '--- ./lint ---' >>"$check_output"
+    ./lint >>"$check_output" 2>&1 || lint_status=$?
+    printf '%s\n' "--- ./lint exit status: $lint_status ---" >>"$check_output"
+
+    if [ "$test_status" -ne 0 ] || [ "$lint_status" -ne 0 ]; then
+        printf '%s\n' 'ensure-tests: ./test or ./lint failed' >&2
+        cat "$check_output" >&2
+        return 1
+    fi
+    return 0
+}
+
+max_fix_attempts=3
+fix_attempts=0
+while :; do
+    if run_checks; then
+        break
+    fi
+
+    if [ "$fix_attempts" -ge "$max_fix_attempts" ]; then
+        printf '%s\n' "ensure-tests: checks still failing after $max_fix_attempts fixing attempts" >&2
+        exit 1
+    fi
+    fix_attempts=$((fix_attempts + 1))
+
+    fix_prompt=$(
+        printf '%s\n' \
+            "The shell has run ./test and ./lint outside the agent context, and at least" \
+            "one of them failed. Fix the failing tests and linter now." \
+            "" \
+            "Preserve the original commit intention and feature behaviour. Make only the" \
+            "smallest changes needed to fix the reported test/lint failures; do not hide" \
+            "failures, weaken tests, redesign the feature, or make unrelated changes." \
+            "Inspect the worktree and the current commit before editing. Run both ./test" \
+            "and ./lint after making the fixes. Once they are fixed, stage the relevant" \
+            "changes and amend the current HEAD commit with: git commit --amend --no-edit." \
+            "Do not create a follow-up commit, and do not amend any earlier commit." \
+            "" \
+            "Here is the captured output from the shell checks:" \
+            "--- begin check output ---"
+        cat "$check_output"
+        printf '%s\n' '--- end check output ---'
+    )
+
+    if ! mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$fix_prompt" </dev/null; then
+        printf '%s\n' 'ensure-tests: test/lint fixing agent failed' >&2
+        exit 1
+    fi
+    # The loop deliberately returns to the shell checks. The agent's own claim
+    # that it ran them is never used as the success condition.
+done
+
+printf '%s\n' 'ensure-tests: tests and lint passed'
