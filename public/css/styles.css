@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  display: grid;
+  min-height: 100vh;
+  margin: 0;
+  place-items: center;
+}
+
+.game { text-align: center; }
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 5rem);
+  gap: .5rem;
+  margin: 1.5rem 0;
+}
+.cell {
+  aspect-ratio: 1;
+  font-size: 2rem;
+  font-weight: bold;
+}

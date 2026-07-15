@@ -3,11 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>    
-    <link rel="stylesheet" href="https://fonts.xz.style/serve/inter.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
+    <title>Tic-Tac-Toe</title>
+    <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-    <h1>Hello, world</h1>
+    <main class="game" aria-labelledby="title">
+        <h1 id="title">Tic-Tac-Toe</h1>
+        <p id="status" role="status">Player X's turn</p>
+        <div class="board" aria-label="Tic-Tac-Toe board">
+            <button class="cell" type="button" data-cell="0" aria-label="Cell 1"></button>
+            <button class="cell" type="button" data-cell="1" aria-label="Cell 2"></button>
+            <button class="cell" type="button" data-cell="2" aria-label="Cell 3"></button>
+            <button class="cell" type="button" data-cell="3" aria-label="Cell 4"></button>
+            <button class="cell" type="button" data-cell="4" aria-label="Cell 5"></button>
+            <button class="cell" type="button" data-cell="5" aria-label="Cell 6"></button>
+            <button class="cell" type="button" data-cell="6" aria-label="Cell 7"></button>
+            <button class="cell" type="button" data-cell="7" aria-label="Cell 8"></button>
+            <button class="cell" type="button" data-cell="8" aria-label="Cell 9"></button>
+        </div>
+        <button id="reset" type="button">New game</button>
+    </main>
+    <script type="module" src="/js/main.js"></script>
 </body>
 </html>
