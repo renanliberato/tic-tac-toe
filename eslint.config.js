@@ -1,10 +1,10 @@
 export default [
   {
-    files: ["public/**/*.js", "test/**/*.js", "*.js"],
+    files: ["public/**/*.js", "test/**/*.js", "tests/**/*.js", "*.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
-      globals: { document: "readonly" }
+      globals: { document: "readonly", URL: "readonly" }
     },
     rules: {
       "no-unused-vars": "error",

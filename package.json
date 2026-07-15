@@ -3,12 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && cucumber-js",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:features": "cucumber-js"
   },
   "devDependencies": {
+    "@cucumber/cucumber": "^13.1.0",
     "eslint": "^9.0.0",
+    "jsdom": "^29.1.1",
     "vitest": "^3.0.0"
   }
 }
