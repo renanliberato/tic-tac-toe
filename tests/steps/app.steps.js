@@ -59,6 +59,26 @@ When("I click the {string} button", function (label) {
   button.click();
 });
 
+Then("the home screen is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, false);
+});
+
+Then("the home screen is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, true);
+});
+
+Then("the game board is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#game-screen").hidden, true);
+});
+
+Then("the game board is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#game-screen").hidden, false);
+});
+
+Then("all board cells are enabled", function () {
+  assert.ok(this.cells().every((cell) => !cell.disabled));
+});
+
 Then("all board cells are empty", function () {
   assert.deepEqual(this.cells().map((cell) => cell.textContent), Array(9).fill(""));
 });
