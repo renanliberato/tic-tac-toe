@@ -1,0 +1,69 @@
+#!/bin/sh
+# Finish a git-save | long-running-command | git-commit pipeline.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf '%s\n' 'git-commit: not inside a Git work tree' >&2
+    exit 1
+}
+cd "$repo_root"
+
+hash_file=.git-save-hash
+
+# A shell pipeline starts every command at once.  Do not inspect the checkpoint
+# or reset while the middle command is still changing or committing files.  In
+# normal use stdin is the middle command's stdout; direct interactive use
+# should not block.
+if [ ! -t 0 ]; then
+    cat >/dev/null
+fi
+
+# git-save creates this file before closing its side of the pipeline, so this
+# check must happen after the barrier above as well.
+if [ ! -f "$hash_file" ]; then
+    printf '%s\n' "git-commit: $hash_file was not found; run git-save first" >&2
+    exit 1
+fi
+
+saved_hash=$(tr -d '\r\n' < "$hash_file")
+
+if [ -n "$saved_hash" ]; then
+    # Verify the file before passing its value to git reset.
+    if ! git rev-parse --verify "${saved_hash}^{commit}" >/dev/null 2>&1; then
+        printf '%s\n' "git-commit: invalid commit hash in $hash_file" >&2
+        exit 1
+    fi
+    git reset --mixed "$saved_hash"
+else
+    # There is no commit to reset to.  Removing the current branch ref and
+    # clearing the index is the unborn-branch equivalent of reset --mixed;
+    # files remain in the worktree and therefore become uncommitted changes.
+    head_ref=$(git symbolic-ref --quiet HEAD 2>/dev/null || true)
+    if git rev-parse --verify HEAD >/dev/null 2>&1; then
+        if [ -n "$head_ref" ]; then
+            git update-ref -d "$head_ref"
+        else
+            git update-ref -d HEAD
+        fi
+    fi
+    git read-tree --empty
+fi
+
+prompt=$(cat <<'TASK'
+Inspect the current Git worktree and all uncommitted changes. These changes
+were produced by the preceding task in this pipeline. Review the diff and
+make any small corrections needed for correctness, but do not discard valid
+work. Then stage and commit the changes with a concise, descriptive
+Conventional Commits message using the appropriate type and scope, such as
+feat(scope): ..., fix(scope): ..., refactor(scope): ..., test(scope): ..., or
+docs(scope): .... Follow Git commit best practices. If there are no changes to
+commit, leave the repository unchanged. Do not commit the .git-save-hash
+bookkeeping file.
+TASK
+)
+
+# The agent is deliberately detached from the pipeline's stdin.  The cat
+# above provides the synchronization barrier; mswea must not consume the
+# middle command's output as its own input.
+exec mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null

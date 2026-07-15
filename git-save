@@ -1,0 +1,140 @@
+#!/bin/sh
+# Save the current worktree before a long-running pipeline stage starts.
+#
+# The companion git-commit script waits for the rest of the pipeline before it
+# uses this file.  Keep this script quiet: its output is the input to the next
+# pipeline stage.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf '%s\n' 'git-save: not inside a Git work tree' >&2
+    exit 1
+}
+cd "$repo_root"
+
+hash_file=.git-save-hash
+# Keep the local checkpoint out of project status and out of commits created
+# by the finishing agent.  Use .git/info/exclude so this helper never edits a
+# repository's tracked .gitignore.
+exclude_file=$(git rev-parse --git-path info/exclude)
+if ! git check-ignore -q -- "$hash_file" 2>/dev/null; then
+    printf '\n# git-save checkpoint (local helper)\n.git-save-hash\n' >> "$exclude_file"
+fi
+git_dir=$(git rev-parse --git-dir)
+hash_tmp=$(mktemp "$git_dir/git-save-hash.tmp.XXXXXX") || {
+    printf '%s\n' 'git-save: could not create a temporary hash file' >&2
+    exit 1
+}
+old_hash_tmp=$(mktemp "${TMPDIR:-/tmp}/git-save-old-hash.XXXXXX") || {
+    rm -f "$hash_tmp"
+    printf '%s\n' 'git-save: could not create a temporary backup' >&2
+    exit 1
+}
+hash_tmp_owned=true
+old_hash_owned=true
+old_hash_present=false
+
+cleanup() {
+    if [ "$hash_tmp_owned" = true ]; then
+        rm -f "$hash_tmp"
+    fi
+    if [ "$old_hash_owned" = true ]; then
+        rm -f "$old_hash_tmp"
+    fi
+}
+restore_old_hash() {
+    if [ "$old_hash_present" = true ]; then
+        cp "$old_hash_tmp" "$hash_file"
+    else
+        rm -f "$hash_file"
+    fi
+}
+failure() {
+    restore_old_hash
+    cleanup
+}
+trap failure INT TERM HUP
+
+if [ -e "$hash_file" ]; then
+    cp "$hash_file" "$old_hash_tmp"
+    old_hash_present=true
+fi
+
+# Resolve HEAD before stashing.  rev-parse fails for an unborn branch, which
+# is represented by an intentionally empty hash file.
+saved_hash=''
+if saved_hash=$(git rev-parse --verify HEAD 2>/dev/null); then
+    :
+else
+    saved_hash=''
+fi
+
+# This is bookkeeping, not project content.  Remove a previous copy before
+# --all so that git stash does not put the bookkeeping file in the user's
+# stash.  The new copy is installed only after the stash succeeds.
+rm -f "$hash_file"
+
+# Avoid invoking stash on an unborn branch with no changes: Git reports that as
+# an error even though there is nothing to save.  --ignored is important here
+# because --all below promises to save ignored files too.
+worktree_status=$(git status --porcelain --untracked-files=all --ignored)
+if [ -z "$worktree_status" ]; then
+    :
+elif git rev-parse --verify HEAD >/dev/null 2>&1; then
+    git stash push --quiet --all --message 'git-save: worktree' || {
+        printf '%s\n' 'git-save: git stash failed' >&2
+        failure
+        exit 1
+    }
+else
+    # git stash cannot operate on an unborn branch.  Give it a temporary empty
+    # root commit, then remove that commit again after the stash is made.
+    head_ref=$(git symbolic-ref --quiet HEAD 2>/dev/null || true)
+    empty_tree=$(git hash-object -t tree /dev/null)
+    temporary_commit=$(printf '%s\n' 'git-save: temporary root' | \
+        GIT_AUTHOR_NAME=git-save \
+        GIT_AUTHOR_EMAIL=git-save@localhost \
+        GIT_COMMITTER_NAME=git-save \
+        GIT_COMMITTER_EMAIL=git-save@localhost \
+        git commit-tree "$empty_tree") || {
+            printf '%s\n' 'git-save: could not prepare an unborn branch for stashing' >&2
+            failure
+            exit 1
+        }
+
+    if [ -n "$head_ref" ]; then
+        git update-ref "$head_ref" "$temporary_commit"
+    else
+        git update-ref HEAD "$temporary_commit"
+    fi
+
+    if ! git stash push --quiet --all --message 'git-save: worktree'; then
+        if [ -n "$head_ref" ]; then
+            git update-ref -d "$head_ref" "$temporary_commit" || true
+        else
+            git update-ref -d HEAD "$temporary_commit" || true
+        fi
+        printf '%s\n' 'git-save: git stash failed' >&2
+        failure
+        exit 1
+    fi
+
+    if [ -n "$head_ref" ]; then
+        git update-ref -d "$head_ref" "$temporary_commit"
+    else
+        git update-ref -d HEAD "$temporary_commit"
+    fi
+    git read-tree --empty
+fi
+
+if [ -n "$saved_hash" ]; then
+    printf '%s\n' "$saved_hash" > "$hash_tmp"
+else
+    : > "$hash_tmp"
+fi
+mv -f "$hash_tmp" "$hash_file"
+hash_tmp_owned=false
+cleanup
+trap - INT TERM HUP
+exit 0
