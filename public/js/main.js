@@ -8,12 +8,15 @@ const start = document.querySelector("#start-game");
 const cells = [...document.querySelectorAll("[data-cell]")];
 const board = document.querySelector(".board");
 const status = document.querySelector("#status");
+const matchmakingDialog = document.querySelector("#matchmaking-dialog");
 const resultDialog = document.querySelector("#result-dialog");
 const resultMessage = document.querySelector("#result-message");
 const resultDetail = document.querySelector("#result-detail");
 const continueButton = document.querySelector("#continue");
+const MATCHMAKING_DURATION = 3000;
 let game = createGame();
 let gameStarted = false;
+let matchmakingTimer = null;
 
 applyPageScale(gameRoot, document.defaultView);
 
@@ -93,7 +96,41 @@ function resetFeedback() {
   status.classList.remove("status--winner", "status--draw", "status--updated");
 }
 
+function openMatchmakingDialog() {
+  if (!matchmakingDialog) return;
+
+  if (typeof matchmakingDialog.showModal === "function") {
+    try {
+      matchmakingDialog.showModal();
+      return;
+    } catch {
+      // jsdom does not implement showModal; the open attribute is a useful fallback.
+    }
+  }
+
+  matchmakingDialog.setAttribute("open", "");
+}
+
+function closeMatchmakingDialog() {
+  if (!matchmakingDialog) return;
+
+  if (typeof matchmakingDialog.close === "function") {
+    matchmakingDialog.close();
+  } else {
+    matchmakingDialog.removeAttribute("open");
+  }
+}
+
+function stopMatchmaking() {
+  if (matchmakingTimer !== null) {
+    globalThis.clearTimeout(matchmakingTimer);
+    matchmakingTimer = null;
+  }
+  closeMatchmakingDialog();
+}
+
 function showGame() {
+  stopMatchmaking();
   closeResultDialog();
   resetFeedback();
   game = createGame();
@@ -105,6 +142,7 @@ function showGame() {
 }
 
 function showHome() {
+  stopMatchmaking();
   closeResultDialog();
   resetFeedback();
   game = createGame();
@@ -128,8 +166,28 @@ cells.forEach((cell, index) => {
   });
 });
 
-start.addEventListener("click", showGame);
+function startMatchmaking() {
+  if (matchmakingTimer !== null) return;
+
+  closeResultDialog();
+  game = createGame();
+  gameStarted = false;
+  homeScreen.hidden = true;
+  gameScreen.hidden = true;
+  render();
+  openMatchmakingDialog();
+
+  matchmakingTimer = globalThis.setTimeout(() => {
+    matchmakingTimer = null;
+    showGame();
+  }, MATCHMAKING_DURATION);
+}
+
+start.addEventListener("click", startMatchmaking);
 continueButton?.addEventListener("click", showHome);
+matchmakingDialog?.addEventListener("cancel", (event) => {
+  event.preventDefault();
+});
 resultDialog?.addEventListener("cancel", (event) => {
   event.preventDefault();
 });
