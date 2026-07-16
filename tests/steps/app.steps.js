@@ -15,6 +15,12 @@ class AppWorld {
     this.dom = new JSDOM(html, { url: "http://localhost/" });
     globalThis.window = this.dom.window;
     globalThis.document = this.dom.window.document;
+    this.nativeSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = (callback, delay, ...args) => this.nativeSetTimeout(
+      callback,
+      delay === 3000 ? 1 : delay,
+      ...args
+    );
 
     // main.js is an application entry point, so import it after the DOM exists.
     // A unique query string gives each scenario a fresh module instance.
@@ -39,6 +45,7 @@ After(function () {
   if (!this.dom) return;
 
   this.dom.window.close();
+  globalThis.setTimeout = this.nativeSetTimeout;
   delete globalThis.window;
   delete globalThis.document;
 });

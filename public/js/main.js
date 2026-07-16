@@ -37,6 +37,7 @@ let game = createGame();
 let player = getOrCreatePlayer();
 let gameStarted = false;
 let matchmakingTimer = null;
+let resultRecorded = false;
 
 applyPageScale(gameRoot, document.defaultView);
 
@@ -183,10 +184,16 @@ function animateWinningLine(line) {
   });
 }
 
+function recordResult() {
+  if (resultRecorded || (!game.winner && !game.draw)) return;
+
+  player = updatePlayerAfterResult(player, game);
+  resultRecorded = true;
+}
+
 function showResult() {
   if ((!game.winner && !game.draw) || !resultDialog || resultDialog.open) return;
 
-  player = updatePlayerAfterResult(player, game);
   resultMessage.textContent = game.winner ? `${game.winner} Won` : "Draw";
   if (resultDetail) {
     resultDetail.textContent = game.winner
@@ -266,6 +273,7 @@ function showGame() {
   closeResultDialog();
   resetFeedback();
   game = createGame();
+  resultRecorded = false;
   player = startPlayerGame(player);
   gameStarted = true;
   homeScreen.hidden = true;
@@ -279,6 +287,7 @@ function showHome() {
   closeResultDialog();
   resetFeedback();
   game = createGame();
+  resultRecorded = false;
   gameStarted = false;
   homeScreen.hidden = false;
   gameScreen.hidden = true;
@@ -294,6 +303,7 @@ cells.forEach((cell, index) => {
     if (game === previousGame) return;
 
     player = updatePlayerAfterMove(player, game, index);
+    if (game.winner || game.draw) recordResult();
     render();
     replayAnimation(cell, "cell--placed");
     replayAnimation(status, "status--updated");
