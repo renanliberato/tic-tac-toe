@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
-import { env } from "node:process";
-import { join } from "node:path";
+import { env, platform as processPlatform } from "node:process";
+import { join, win32 as windowsPath } from "node:path";
 import { pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
 import puppeteer from "puppeteer";
@@ -30,24 +30,49 @@ describe("dialog layout", () => {
   });
 });
 
-function browserPath() {
-  const configuredPath = env.BROWSER_PATH ?? env.CHROME_PATH ?? env.CHROMIUM_PATH;
-  let managedPath;
+function windowsBrowserPaths(environment) {
+  return [
+    environment.ProgramFiles,
+    environment["ProgramFiles(x86)"],
+    environment.ProgramW6432,
+    environment.LOCALAPPDATA
+  ]
+    .filter(Boolean)
+    .flatMap((root) => [
+      windowsPath.join(root, "Google", "Chrome", "Application", "chrome.exe"),
+      windowsPath.join(root, "Chromium", "Application", "chrome.exe")
+    ]);
+}
 
-  try {
-    managedPath = puppeteer.executablePath();
-  } catch {
-    managedPath = undefined;
+function browserPath({
+  platform = processPlatform,
+  environment = env,
+  fileExists = existsSync,
+  managedBrowserPath
+} = {}) {
+  const configuredPath = environment.BROWSER_PATH ?? environment.CHROME_PATH ?? environment.CHROMIUM_PATH;
+  let managedPath = managedBrowserPath;
+
+  if (managedPath === undefined) {
+    try {
+      managedPath = puppeteer.executablePath();
+    } catch {
+      managedPath = undefined;
+    }
   }
 
+  const windowsPaths = platform === "win32" ? windowsBrowserPaths(environment) : [];
   const executablePath = [
     configuredPath,
     managedPath,
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
-    "/usr/bin/chromium-browser"
-  ].find((candidate) => candidate && existsSync(candidate));
+    "/usr/bin/chromium-browser",
+    ...windowsPaths
+  ].find(
+    (candidate) => candidate && fileExists(candidate)
+  );
 
   if (!executablePath) {
     throw new Error(
@@ -57,6 +82,37 @@ function browserPath() {
 
   return executablePath;
 }
+
+describe("system browser fallback", () => {
+  it("finds Chrome in standard Windows installation directories", () => {
+    const windowsEnvironment = {
+      ProgramFiles: "C:\\Program Files",
+      "ProgramFiles(x86)": "C:\\Program Files (x86)",
+      LOCALAPPDATA: "C:\\Users\\Tester\\AppData\\Local"
+    };
+    const chromePath = (root) => windowsPath.join(
+      root,
+      "Google",
+      "Chrome",
+      "Application",
+      "chrome.exe"
+    );
+
+    for (const expectedPath of [
+      chromePath(windowsEnvironment.ProgramFiles),
+      chromePath(windowsEnvironment.LOCALAPPDATA)
+    ]) {
+      expect(
+        browserPath({
+          platform: "win32",
+          environment: windowsEnvironment,
+          managedBrowserPath: null,
+          fileExists: (candidate) => candidate === expectedPath
+        })
+      ).toBe(expectedPath);
+    }
+  });
+});
 
 function browserFixture() {
   return `<!doctype html>
