@@ -9,14 +9,18 @@ function dialogRule() {
 }
 
 describe("dialog layout", () => {
-  it("keeps the result dialog centered despite the theme margin reset", () => {
-    expect(dialogRule()).toMatch(/(?:^|\n)\s*margin:\s*auto\s*;/);
+  it("centers both top-layer dialogs in the viewport before scaling", () => {
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*position:\s*fixed\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*top:\s*50%\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*left:\s*50%\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*margin:\s*0\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*transform:\s*translate\(-50%,\s*-50%\)\s+scale\(var\(--page-scale,\s*1\)\)\s*;/);
   });
 
   it("scales top-layer dialogs with the design canvas", () => {
     expect(dialogRule()).toMatch(/(?:^|\n)\s*width:\s*720px\s*;/);
     expect(dialogRule()).toMatch(/(?:^|\n)\s*max-height:\s*none\s*;/);
-    expect(dialogRule()).toMatch(/(?:^|\n)\s*transform:\s*scale\(var\(--page-scale,\s*1\)\)\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*transform:\s*translate\(-50%,\s*-50%\)\s+scale\(var\(--page-scale,\s*1\)\)\s*;/);
     expect(styles).not.toMatch(/\.game dialog\s*\{[^}]*width:\s*min\(720px,\s*calc\(100%\s*-\s*96px\)\)/s);
   });
 });
