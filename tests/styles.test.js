@@ -250,7 +250,15 @@ describe("scaled game layout", () => {
 
   it("caps the board and distributes its cells across the board", () => {
     expect(styles).toMatch(/\.game \.board\s*\{[^}]*width:\s*min\(100%,\s*var\(--board-width\)\)/s);
+    expect(styles).toMatch(/\.game \.board\s*\{[^}]*aspect-ratio:\s*1\b/s);
     expect(styles).toMatch(/\.game \.board\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s);
+    expect(styles).toMatch(/\.game \.board\s*\{[^}]*grid-template-rows:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s);
     expect(styles).not.toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(4\.5rem,\s*5rem\)\)/);
+  });
+
+  it("makes each cell fill its square grid track for a usable hit area", () => {
+    expect(styles).toMatch(/\.game \.cell\s*\{[^}]*align-self:\s*stretch/s);
+    expect(styles).toMatch(/\.game \.cell\s*\{[^}]*width:\s*100%/s);
+    expect(styles).toMatch(/\.game \.cell\s*\{[^}]*height:\s*100%/s);
   });
 });
