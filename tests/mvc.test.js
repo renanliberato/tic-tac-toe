@@ -1,0 +1,201 @@
+import { describe, expect, it } from "vitest";
+import { JSDOM } from "jsdom";
+import { GameController } from "../public/js/controller.js";
+import { GameModel } from "../public/js/model.js";
+import { GameView } from "../public/js/view.js";
+
+class FakeView {
+  constructor() {
+    this.cells = Array(9).fill(null);
+    this.rendered = [];
+    this.startHandler = null;
+    this.continueHandler = null;
+    this.cellHandlers = [];
+    this.actions = [];
+    this.winningLines = [];
+    this.resultStates = [];
+  }
+
+  onStart(handler) {
+    this.startHandler = handler;
+  }
+
+  onCell(index, handler) {
+    this.cellHandlers[index] = handler;
+  }
+
+  onContinue(handler) {
+    this.continueHandler = handler;
+  }
+
+  bindDialogGuards() {}
+
+  render(state, gameStarted, winningLine) {
+    this.rendered.push({ state, gameStarted, winningLine });
+  }
+
+  showMatchmaking() { this.actions.push("showMatchmaking"); }
+  showGame() { this.actions.push("showGame"); }
+  showHome() { this.actions.push("showHome"); }
+  closeResultDialog() { this.actions.push("closeResultDialog"); }
+  openMatchmakingDialog() { this.actions.push("openMatchmakingDialog"); }
+  closeMatchmakingDialog() { this.actions.push("closeMatchmakingDialog"); }
+  resetFeedback() { this.actions.push("resetFeedback"); }
+  replayMove(index) { this.actions.push(["replayMove", index]); }
+  animateWinningLine(line) {
+    this.winningLines.push(line);
+    return Promise.resolve();
+  }
+  openResultDialog(state) { this.resultStates.push(state); }
+}
+
+function createViewDocument() {
+  const cells = Array.from({ length: 9 }, (_, index) =>
+    `<button data-cell="${index}" type="button"></button>`
+  ).join("");
+
+  return new JSDOM(`
+    <main class="game">
+      <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
+      <section id="game-screen" hidden>
+        <p id="status" class="status"></p>
+        <div class="board">${cells}<span data-winning-line hidden></span></div>
+      </section>
+      <dialog id="matchmaking-dialog"></dialog>
+      <dialog id="result-dialog">
+        <h2 id="result-message"></h2>
+        <p id="result-detail"></p>
+        <button id="continue" type="button">Continue</button>
+      </dialog>
+    </main>
+  `);
+}
+
+describe("MVC game architecture", () => {
+  it("publishes state changes and supports unsubscribing from model updates", () => {
+    const model = new GameModel();
+    const states = [];
+    const unsubscribe = model.subscribe((state) => states.push(state));
+
+    expect(model.makeMove(0)).toBe(true);
+    expect(model.makeMove(0)).toBe(false);
+    expect(states).toHaveLength(1);
+    expect(model.getState().board[0]).toBe("X");
+
+    expect(model.reset().board).toEqual(Array(9).fill(null));
+    expect(states).toHaveLength(2);
+
+    unsubscribe();
+    model.reset();
+    expect(states).toHaveLength(2);
+  });
+
+  it("coordinates matchmaking, moves, and a winning result without a DOM", async () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    let matchmakingCallback;
+    let scheduledTimers = 0;
+    const timer = {
+      setTimeout(callback) {
+        matchmakingCallback = callback;
+        scheduledTimers += 1;
+        return scheduledTimers;
+      },
+      clearTimeout() {}
+    };
+    const controller = new GameController(model, view, timer);
+
+    expect(view.rendered.at(-1).gameStarted).toBe(false);
+    view.startHandler();
+    view.startHandler();
+    expect(scheduledTimers).toBe(1);
+    expect(view.actions).toContain("showMatchmaking");
+
+    matchmakingCallback();
+    expect(view.rendered.at(-1).gameStarted).toBe(true);
+    expect(view.actions).toContain("showGame");
+
+    for (const index of [0, 3, 1, 4, 2]) controller.play(index);
+
+    expect(view.winningLines).toEqual([[0, 1, 2]]);
+    expect(view.resultStates).toHaveLength(0);
+    await Promise.resolve();
+    expect(view.resultStates).toHaveLength(1);
+    expect(view.resultStates[0].winner).toBe("X");
+  });
+
+  it("opens a draw result immediately and returns home on continue", () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    const controller = new GameController(model, view, {
+      setTimeout: () => 1,
+      clearTimeout: () => {}
+    });
+
+    controller.startGame();
+    for (const index of [0, 1, 2, 4, 3, 5, 7, 6, 8]) controller.play(index);
+
+    expect(view.resultStates).toHaveLength(1);
+    expect(view.resultStates[0].draw).toBe(true);
+
+    view.continueHandler();
+    expect(view.actions).toContain("showHome");
+    expect(model.getState().board).toEqual(Array(9).fill(null));
+  });
+
+  it("renders state and winning-line geometry in the DOM view", () => {
+    const dom = createViewDocument();
+    const documentRef = dom.window.document;
+    const view = new GameView(documentRef);
+    const board = documentRef.querySelector(".board");
+
+    for (const [index, cell] of [...documentRef.querySelectorAll("[data-cell]")].entries()) {
+      Object.defineProperties(cell, {
+        offsetParent: { configurable: true, value: board },
+        offsetLeft: { configurable: true, value: (index % 3) * 120 },
+        offsetTop: { configurable: true, value: Math.floor(index / 3) * 120 },
+        offsetWidth: { configurable: true, value: 100 },
+        offsetHeight: { configurable: true, value: 100 }
+      });
+    }
+
+    view.render({
+      board: ["X", "X", "X", "O", null, null, null, null, null],
+      player: "X",
+      winner: "X",
+      draw: false
+    }, true, [0, 1, 2]);
+
+    expect([...view.cells].map((cell) => cell.textContent)).toEqual([
+      "X", "X", "X", "O", "", "", "", "", ""
+    ]);
+    expect(view.cells.slice(0, 3).every((cell) => cell.classList.contains("cell--winner"))).toBe(true);
+    expect(view.cells[0].disabled).toBe(true);
+    expect(view.cells[4].disabled).toBe(true);
+    expect(view.cells[0].getAttribute("aria-label")).toBe("Cell 1, X");
+    expect(documentRef.querySelector("#status").textContent).toBe("Player X wins!");
+
+    const winningLine = documentRef.querySelector("[data-winning-line]");
+    expect(winningLine.dataset.line).toBe("0,1,2");
+    expect(winningLine.style.left).toBe("50px");
+    expect(winningLine.style.width).toBe("240px");
+    expect(winningLine.style.getPropertyValue("--winning-line-angle")).toBe("0rad");
+  });
+
+  it("prevents dialog dismissal and supplies result feedback", () => {
+    const dom = createViewDocument();
+    const documentRef = dom.window.document;
+    const view = new GameView(documentRef);
+    const resultDialog = documentRef.querySelector("#result-dialog");
+
+    view.bindDialogGuards();
+    const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+    expect(resultDialog.dispatchEvent(cancelEvent)).toBe(false);
+    expect(cancelEvent.defaultPrevented).toBe(true);
+
+    view.openResultDialog({ winner: "O", draw: false });
+    expect(resultDialog.open).toBe(true);
+    expect(documentRef.querySelector("#result-message").textContent).toBe("O Won");
+    expect(documentRef.querySelector("#result-detail").textContent).toBe("Three in a row!");
+  });
+});
