@@ -1,10 +1,11 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
 import { env } from "node:process";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
+import puppeteer from "puppeteer";
 
 const styles = readFileSync(new URL("../public/css/styles.css", import.meta.url), "utf8");
 
@@ -29,13 +30,18 @@ describe("dialog layout", () => {
   });
 });
 
-const browserPath = [
-  env.CHROME_PATH,
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "/usr/bin/google-chrome",
-  "/usr/bin/chromium",
-  "/usr/bin/chromium-browser"
-].find((candidate) => candidate && existsSync(candidate));
+function browserPath() {
+  const configuredPath = env.BROWSER_PATH ?? env.CHROME_PATH ?? env.CHROMIUM_PATH;
+  const executablePath = configuredPath ?? puppeteer.executablePath();
+
+  if (!executablePath || !existsSync(executablePath)) {
+    throw new Error(
+      "The rendered dialog layout test requires a Chromium executable. Run `npm install` to install Puppeteer’s managed browser, or set BROWSER_PATH to an installed browser."
+    );
+  }
+
+  return executablePath;
+}
 
 function browserFixture() {
   return `<!doctype html>
@@ -87,73 +93,33 @@ function browserFixture() {
     </script>`;
 }
 
-function measureDialogsInBrowser(viewport) {
-  return new Promise((resolve, reject) => {
-    const directory = mkdtempSync(join(tmpdir(), "dialog-layout-"));
-    const fixturePath = join(directory, "fixture.html");
-    const profilePath = join(directory, "profile");
-    writeFileSync(fixturePath, browserFixture());
+async function measureDialogsInBrowser(viewport, executablePath) {
+  const directory = mkdtempSync(join(tmpdir(), "dialog-layout-"));
+  const fixturePath = join(directory, "fixture.html");
+  writeFileSync(fixturePath, browserFixture());
 
-    const browser = spawn(browserPath, [
-      "--headless=new",
-      "--no-sandbox",
-      "--disable-gpu",
-      "--disable-background-networking",
-      "--disable-component-update",
-      "--disable-sync",
-      "--disable-crash-reporter",
-      "--no-first-run",
-      "--no-default-browser-check",
-      `--user-data-dir=${profilePath}`,
-      `--window-size=${viewport.width},${viewport.height}`,
-      "--virtual-time-budget=500",
-      "--dump-dom",
-      `file://${fixturePath}`
-    ], { stdio: ["ignore", "pipe", "ignore"] });
-    let output = "";
-    let settled = false;
-    const timeout = globalThis.setTimeout(() => {
-      finish(() => reject(new Error("The browser did not render the dialog fixture in time.")));
-    }, 15000);
-
-    function cleanup() {
-      globalThis.clearTimeout(timeout);
-      rmSync(directory, { recursive: true, force: true });
-    }
-
-    function finish(callback) {
-      if (settled) return;
-      settled = true;
-      browser.kill("SIGKILL");
-      cleanup();
-      callback();
-    }
-
-    browser.stdout.on("data", (chunk) => {
-      output += chunk;
-      const match = output.match(/data-layout="([^\"]+)"/);
-      if (!match) return;
-
-      try {
-        const encodedLayout = match[1].replaceAll("&quot;", "\"");
-        finish(() => resolve(JSON.parse(encodedLayout)));
-      } catch (error) {
-        finish(() => reject(error));
-      }
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-gpu", "--disable-background-networking"]
     });
-    browser.on("error", (error) => finish(() => reject(error)));
-    browser.on("close", (code) => {
-      if (!settled) {
-        finish(() => reject(new Error(`The browser exited before rendering (code ${code}).`)));
-      }
-    });
-  });
+    const page = await browser.newPage();
+    await page.setViewport(viewport);
+    await page.goto(pathToFileURL(fixturePath).href, { waitUntil: "load", timeout: 15000 });
+    return await page.evaluate(() => JSON.parse(document.body.dataset.layout));
+  } finally {
+    await browser?.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 describe("rendered dialog layout", () => {
-  it.skipIf(!browserPath)("centers and scales both dialogs at narrow and wide viewports", async () => {
+  it("centers and scales both dialogs at narrow and wide viewports", async () => {
+    const executablePath = browserPath();
     for (const requestedViewport of [{ width: 375, height: 812 }, { width: 1366, height: 1024 }]) {
-      const layout = await measureDialogsInBrowser(requestedViewport);
+      const layout = await measureDialogsInBrowser(requestedViewport, executablePath);
       const expectedWidth = 720 * layout.scale;
 
       expect(layout.dialogs).toHaveLength(2);
