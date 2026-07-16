@@ -22,4 +22,5 @@ cd "$worktree_path" || exit 1
 mswea codex:gpt-5.6-luna@high --yolo --exit-immediately
 ./git-commit
 ./ensure-tests
+./code-review
 ./git-worktree-merge

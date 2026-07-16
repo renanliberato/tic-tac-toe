@@ -1,0 +1,177 @@
+#!/bin/sh
+# Review the completed worktree and resolve review findings before merging.
+#
+# The reviewer and fixer communicate through REVIEW_OUTPUT.md.  The reviewer
+# must write one of these machine-readable headers before its findings:
+#
+#   REVIEW_STATUS: NO_ISSUES
+#   REVIEW_CRITICALITY: NONE
+#
+# or:
+#
+#   REVIEW_STATUS: ISSUES_FOUND
+#   REVIEW_CRITICALITY: CRITICAL|HIGH|MEDIUM|LOW
+#
+# The shell parses those keywords, not the agent's exit message, so a review
+# can finish only after a reviewer explicitly reports no issues.  A fresh
+# reviewer and a separate fixer invocation are used on every iteration.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf '%s\n' 'code-review: not inside a Git work tree' >&2
+    exit 1
+}
+cd "$repo_root"
+
+if ! command -v mswea >/dev/null 2>&1; then
+    printf '%s\n' 'code-review: mswea is required to run the review agents' >&2
+    exit 1
+fi
+
+# These are separate agent sessions and separate roles.  They may be
+# overridden when a deployment has dedicated reviewer/fixer agent names.
+review_agent=${CODE_REVIEW_REVIEW_AGENT:-codex:gpt-5.6-luna@high}
+fix_agent=${CODE_REVIEW_FIX_AGENT:-codex:gpt-5.6-luna@high}
+review_file=REVIEW_OUTPUT.md
+
+review_prompt=$(cat <<'TASK'
+Act as the independent code-review agent for the current Git worktree. Do not
+fix code yourself. Inspect the complete change under review, including the
+current commit and its parent (and the working tree if relevant), and look for
+correctness bugs, regressions, security problems, missing error handling, and
+missing or inadequate tests. Focus on actionable issues introduced by this
+change; do not report stylistic preferences or unrelated pre-existing issues.
+
+You must communicate with the fixing agent by creating or replacing exactly
+REVIEW_OUTPUT.md in the repository root. Do not leave the report only in your
+chat response. Start the file with exactly one of these two lines:
+
+REVIEW_STATUS: NO_ISSUES
+REVIEW_STATUS: ISSUES_FOUND
+
+Then add exactly one line with the highest applicable severity:
+
+REVIEW_CRITICALITY: NONE       (only with NO_ISSUES)
+REVIEW_CRITICALITY: CRITICAL   (data loss, security, or a release blocker)
+REVIEW_CRITICALITY: HIGH       (major correctness or user-facing defect)
+REVIEW_CRITICALITY: MEDIUM     (meaningful defect with a workaround)
+REVIEW_CRITICALITY: LOW        (minor but valid defect)
+
+When issues exist, include a concise numbered list after those headers. Prefix
+each item with its severity keyword, for example `[HIGH]`, and include the
+file/line, the problem, and a concrete expected correction. When there are no
+issues, state that clearly after the headers. Do not edit production or test
+files, do not stage anything, and do not commit REVIEW_OUTPUT.md.
+TASK
+)
+
+fix_prompt=$(cat <<'TASK'
+Act as the independent issue-fixing agent. Read REVIEW_OUTPUT.md first; it is
+the authoritative handoff from a different reviewer. Fix every valid issue it
+reports, starting with the highest REVIEW_CRITICALITY, while preserving the
+intended behaviour and avoiding unrelated refactors. Inspect the relevant code
+and tests before editing, and run the most appropriate tests or checks after
+making changes.
+
+Do not edit, rewrite, stage, or commit REVIEW_OUTPUT.md: it is communication
+between the two agents and the shell will manage it. Make the actual source
+and test changes in the worktree. Do not create a commit yourself; the shell
+will run ./git-commit after this agent exits. If the report is malformed or
+contains no actionable issue, leave the worktree unchanged and explain that
+fact in your response.
+TASK
+)
+
+cleanup() {
+    if [ "${review_backup_owned-false}" = true ]; then
+        rm -f "$review_backup"
+    fi
+}
+trap cleanup EXIT INT TERM HUP
+
+review_iteration=0
+while :; do
+    review_iteration=$((review_iteration + 1))
+    printf '%s\n' "code-review: starting review iteration $review_iteration"
+    rm -f "$review_file"
+
+    if ! mswea "$review_agent" --yolo --exit-immediately -t "$review_prompt" </dev/null; then
+        printf '%s\n' 'code-review: reviewer agent failed' >&2
+        exit 1
+    fi
+
+    if [ ! -s "$review_file" ]; then
+        printf '%s\n' "code-review: reviewer did not create $review_file" >&2
+        exit 1
+    fi
+
+    review_status=$(awk -F: '
+        /^[[:space:]]*REVIEW_STATUS[[:space:]]*:/ {
+            value=$2
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            print value
+            exit
+        }
+    ' "$review_file")
+    review_criticality=$(awk -F: '
+        /^[[:space:]]*REVIEW_CRITICALITY[[:space:]]*:/ {
+            value=$2
+            sub(/^[[:space:]]*/, "", value)
+            sub(/[[:space:]]*$/, "", value)
+            print value
+            exit
+        }
+    ' "$review_file")
+
+    case "$review_status:$review_criticality" in
+        NO_ISSUES:NONE)
+            printf '%s\n' 'code-review: reviewer found no issues'
+            exit 0
+            ;;
+        ISSUES_FOUND:CRITICAL|ISSUES_FOUND:HIGH|ISSUES_FOUND:MEDIUM|ISSUES_FOUND:LOW)
+            printf '%s\n' "code-review: reviewer found $review_criticality issues"
+            ;;
+        *)
+            printf '%s\n' "code-review: invalid REVIEW_OUTPUT.md protocol (status=$review_status criticality=$review_criticality)" >&2
+            exit 1
+            ;;
+    esac
+
+    # git-save intentionally stashes --all, including the report. Preserve the
+    # handoff outside the worktree, then put it back for the fixing agent.
+    review_backup=$(mktemp "${TMPDIR:-/tmp}/code-review-output.XXXXXX") || {
+        printf '%s\n' 'code-review: could not create report backup' >&2
+        exit 1
+    }
+    review_backup_owned=true
+    cp "$review_file" "$review_backup"
+
+    if ! ./git-save; then
+        printf '%s\n' 'code-review: git-save failed before fixing review issues' >&2
+        exit 1
+    fi
+    cp "$review_backup" "$review_file"
+    rm -f "$review_backup"
+    review_backup_owned=false
+
+    if ! mswea "$fix_agent" --yolo --exit-immediately -t "$fix_prompt" </dev/null; then
+        printf '%s\n' 'code-review: fixing agent failed' >&2
+        exit 1
+    fi
+
+    # git-commit restores the checkpoint and delegates staging/committing to
+    # its agent. REVIEW_OUTPUT.md is explicitly excluded from that commit.
+    if ! ./git-commit </dev/null; then
+        printf '%s\n' 'code-review: git-commit failed after fixing review issues' >&2
+        exit 1
+    fi
+
+    # Every review fix must pass the same authoritative test/lint gate before
+    # it is presented to another reviewer.
+    if ! ./ensure-tests </dev/null; then
+        printf '%s\n' 'code-review: ensure-tests failed after review fixes' >&2
+        exit 1
+    fi
+done

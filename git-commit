@@ -59,7 +59,8 @@ Conventional Commits message using the appropriate type and scope, such as
 feat(scope): ..., fix(scope): ..., refactor(scope): ..., test(scope): ..., or
 docs(scope): .... Follow Git commit best practices. If there are no changes to
 commit, leave the repository unchanged. Do not commit the .git-save-hash
-bookkeeping file.
+bookkeeping file or REVIEW_OUTPUT.md; REVIEW_OUTPUT.md is temporary
+communication between code-review agents.
 TASK
 )
 
