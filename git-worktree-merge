@@ -1,0 +1,126 @@
+#!/bin/sh
+# Push a linked worktree, then merge it into the primary checkout.
+# Source this script if the caller's shell should remain in the primary checkout.
+
+set -u
+
+release_lock() {
+    if [ "${merge_lock_owned-false}" = true ]; then
+        rm -f "$merge_lock"
+        merge_lock_owned=false
+    fi
+}
+
+main() {
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+        printf '%s\n' 'git-worktree-merge: not inside a Git work tree' >&2
+        return 1
+    }
+    worktree_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || {
+        printf '%s\n' 'git-worktree-merge: worktree must be on a branch' >&2
+        return 1
+    }
+
+    case "$worktree_branch" in
+        [0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF])
+            ;;
+        *)
+            printf 'git-worktree-merge: current branch is not a six-character worktree branch: %s\n' "$worktree_branch" >&2
+            return 1
+            ;;
+    esac
+
+    main_root=$(git worktree list --porcelain |
+        awk '$1 == "worktree" { print substr($0, 10); exit }')
+    if [ -z "$main_root" ]; then
+        printf '%s\n' 'git-worktree-merge: could not find the main worktree' >&2
+        return 1
+    fi
+    if [ "$repo_root" = "$main_root" ]; then
+        printf '%s\n' 'git-worktree-merge: run this command from a linked worktree, not the main checkout' >&2
+        return 1
+    fi
+
+    if [ ! -x "$main_root/git-sync" ]; then
+        printf '%s\n' 'git-worktree-merge: git-sync is missing or not executable in the main checkout' >&2
+        return 1
+    fi
+
+    # Push before entering the primary checkout. A new branch gets its
+    # upstream here; subsequent invocations use the existing upstream.
+    upstream=''
+    if upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null); then
+        git push || return 1
+    else
+        git push --set-upstream origin "$worktree_branch" || return 1
+    fi
+
+    cd "$main_root" || return 1
+    "$main_root/git-sync" || return 1
+
+    # noclobber makes creation fail if another merge owns this lock. The
+    # operation is intentionally local to the repository's common Git dir.
+    merge_lock=$(git rev-parse --git-path git-worktree-merge.lock)
+    merge_lock_owned=false
+    if (set -C; : > "$merge_lock") 2>/dev/null; then
+        merge_lock_owned=true
+        printf '%s\n' "$$" > "$merge_lock"
+    else
+        printf 'git-worktree-merge: another merge holds %s\n' "$merge_lock" >&2
+        return 1
+    fi
+    trap release_lock INT TERM HUP EXIT
+
+    if ! git fetch origin "$worktree_branch"; then
+        release_lock
+        trap - INT TERM HUP EXIT
+        return 1
+    fi
+
+    if git merge --no-edit "origin/$worktree_branch"; then
+        printf 'Merged worktree branch %s into %s\n' "$worktree_branch" "$(git branch --show-current)"
+        release_lock
+        trap - INT TERM HUP EXIT
+        return 0
+    fi
+
+    merge_head=$(git rev-parse --git-path MERGE_HEAD)
+    if [ -f "$merge_head" ] || [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
+        if ! git merge --abort; then
+            printf '%s\n' 'git-worktree-merge: could not abort the conflicted merge' >&2
+            release_lock
+            trap - INT TERM HUP EXIT
+            return 1
+        fi
+
+        prompt=$(cat <<TASK
+Merge the worktree branch $worktree_branch into the primary branch in this
+repository. Start by running git fetch origin $worktree_branch and then
+git merge --no-edit origin/$worktree_branch. Resolve all conflicts carefully,
+preserving valid work from both sides; stage the resolutions and complete the
+merge. Do not discard unrelated changes. Verify that the repository is left
+with the merge completed and no unmerged files.
+TASK
+)
+        if ! command -v mswea >/dev/null 2>&1; then
+            printf '%s\n' 'git-worktree-merge: mswea is required to resolve merge conflicts' >&2
+            release_lock
+            trap - INT TERM HUP EXIT
+            return 1
+        fi
+        mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null
+        status=$?
+        release_lock
+        trap - INT TERM HUP EXIT
+        return "$status"
+    fi
+
+    printf '%s\n' 'git-worktree-merge: git merge failed without leaving a conflict to resolve' >&2
+    release_lock
+    trap - INT TERM HUP EXIT
+    return 1
+}
+
+main "$@"
+status=$?
+return "$status" 2>/dev/null || exit "$status"

@@ -1,0 +1,58 @@
+#!/bin/sh
+# Fetch and rebase the current branch, delegating conflict resolution to an agent.
+
+set -u
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf '%s\n' 'git-sync: not inside a Git work tree' >&2
+    exit 1
+}
+cd "$repo_root" || exit 1
+
+if ! git fetch; then
+    printf '%s\n' 'git-sync: git fetch failed' >&2
+    exit 1
+fi
+
+if git pull --rebase; then
+    exit 0
+fi
+
+# A failed pull is not necessarily a conflict (for example, it can be caused
+# by a missing upstream). Only abort and involve an agent when Git left a
+# rebase/conflict state behind.
+rebase_merge=$(git rev-parse --git-path rebase-merge)
+rebase_apply=$(git rev-parse --git-path rebase-apply)
+rebase_conflict=false
+if [ -e "$rebase_merge" ] || [ -e "$rebase_apply" ]; then
+    rebase_conflict=true
+elif [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
+    rebase_conflict=true
+fi
+
+if [ "$rebase_conflict" != true ]; then
+    printf '%s\n' 'git-sync: git pull --rebase failed without leaving a conflict to resolve' >&2
+    exit 1
+fi
+
+if ! git rebase --abort; then
+    printf '%s\n' 'git-sync: could not abort the conflicted rebase' >&2
+    exit 1
+fi
+
+prompt=$(cat <<'TASK'
+Synchronize this Git worktree with its configured upstream. Run `git pull
+--rebase`. If it produces conflicts, resolve them carefully without discarding
+valid local or upstream work, stage each resolution, and run `git rebase
+--continue` until the rebase is complete. If Git asks for a commit message,
+provide a concise appropriate one. Verify the resulting worktree is not left
+in a rebase or conflict state. Do not make unrelated changes.
+TASK
+)
+
+if ! command -v mswea >/dev/null 2>&1; then
+    printf '%s\n' 'git-sync: mswea is required to resolve rebase conflicts' >&2
+    exit 1
+fi
+
+mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null

@@ -1,0 +1,78 @@
+#!/bin/sh
+# Create a short-lived linked worktree and enter it when this file is sourced.
+# An executable child process cannot change its caller's directory; use
+# `. ./git-worktree-create NAME` when the current interactive shell must move.
+
+set -u
+
+main() {
+    if [ "$#" -ne 1 ] || [ -z "${1-}" ]; then
+        printf 'Usage: ./%s NAME\n' "$(basename "$0")" >&2
+        printf '%s\n' '       . ./'"$(basename "$0")"' NAME  # also change this shell directory' >&2
+        return 2
+    fi
+
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+        printf '%s\n' 'git-worktree-create: not inside a Git work tree' >&2
+        return 1
+    }
+
+    # The first entry is the primary checkout. This also works when the
+    # command is run from an existing linked worktree.
+    main_root=$(git worktree list --porcelain |
+        awk '$1 == "worktree" { print substr($0, 10); exit }')
+    if [ -z "$main_root" ]; then
+        printf '%s\n' 'git-worktree-create: could not find the main worktree' >&2
+        return 1
+    fi
+    cd "$main_root" || return 1
+
+    name=$1
+    case "$name" in
+        *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-]*|/*)
+            printf '%s\n' 'git-worktree-create: NAME may contain only letters, digits, dot, underscore, and hyphen' >&2
+            return 2
+            ;;
+    esac
+
+    case "$name" in
+        [0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF])
+            worktree_id=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+            ;;
+        *)
+            worktree_id=$(printf '%s' "$name" | git hash-object --stdin | cut -c 1-6) || {
+                printf '%s\n' 'git-worktree-create: could not hash NAME' >&2
+                return 1
+            }
+            ;;
+    esac
+
+    worktree_path=$main_root/.worktrees/$worktree_id
+    if [ -e "$worktree_path" ]; then
+        printf 'git-worktree-create: worktree path already exists: %s\n' "$worktree_path" >&2
+        return 1
+    fi
+    if git show-ref --verify --quiet "refs/heads/$worktree_id"; then
+        printf 'git-worktree-create: branch already exists: %s\n' "$worktree_id" >&2
+        return 1
+    fi
+
+    # .worktrees is local orchestration state, not project content.
+    exclude_file=$(git rev-parse --git-path info/exclude)
+    if ! git check-ignore -q -- .worktrees 2>/dev/null; then
+        printf '\n# git-worktree helpers\n.worktrees/\n' >> "$exclude_file"
+    fi
+    mkdir -p "$main_root/.worktrees" || return 1
+
+    git worktree add -b "$worktree_id" "$worktree_path" HEAD || return 1
+    cd "$worktree_path" || return 1
+
+    printf 'Created worktree %s on branch %s\n' "$worktree_path" "$worktree_id"
+    printf 'Shell directory: %s\n' "$worktree_path"
+}
+
+main "$@"
+status=$?
+# `return` succeeds only when this file was sourced. Otherwise fall back to
+# exit, keeping normal executable invocation useful as well.
+return "$status" 2>/dev/null || exit "$status"
