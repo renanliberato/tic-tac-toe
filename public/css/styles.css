@@ -396,11 +396,14 @@ body {
 
 .game dialog {
   box-sizing: border-box;
-  width: min(720px, calc(100% - 96px));
+  width: 720px;
   margin: auto;
   max-width: none;
+  max-height: none;
   padding: 56px;
   font-size: 32px;
+  transform: scale(var(--page-scale, 1));
+  transform-origin: center;
   line-height: 1.4;
   background: var(--main-background, Canvas);
   color: var(--primary-text, CanvasText);
