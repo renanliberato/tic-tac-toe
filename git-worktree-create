@@ -1,14 +1,14 @@
 #!/bin/sh
 # Create a short-lived linked worktree and enter it when this file is sourced.
 # An executable child process cannot change its caller's directory; use
-# `. ./git-worktree-create NAME` when the current interactive shell must move.
+# `. ./git-worktree-create` when the current interactive shell must move.
 
 set -u
 
 main() {
-    if [ "$#" -ne 1 ] || [ -z "${1-}" ]; then
-        printf 'Usage: ./%s NAME\n' "$(basename "$0")" >&2
-        printf '%s\n' '       . ./'"$(basename "$0")"' NAME  # also change this shell directory' >&2
+    if [ "$#" -ne 0 ]; then
+        printf 'Usage: ./%s\n' "$(basename "$0")" >&2
+        printf '%s\n' '       . ./'"$(basename "$0")"'  # also change this shell directory' >&2
         return 2
     fi
 
@@ -27,35 +27,39 @@ main() {
     fi
     cd "$main_root" || return 1
 
-    name=$1
-    case "$name" in
-        *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-]*|/*)
-            printf '%s\n' 'git-worktree-create: NAME may contain only letters, digits, dot, underscore, and hyphen' >&2
-            return 2
-            ;;
-    esac
+    # Use a short UUID prefix for both the worktree directory and branch. A
+    # collision is unlikely, but checking both Git and the filesystem keeps the
+    # helper safe even when several worktrees are created in quick succession.
+    attempts=0
+    while :; do
+        uuid=$(uuidgen 2>/dev/null) || {
+            printf '%s\n' 'git-worktree-create: could not generate a UUID' >&2
+            return 1
+        }
+        worktree_id=$(printf '%s' "$uuid" |
+            tr -d '-' | cut -c 1-6 | tr '[:upper:]' '[:lower:]')
+        case "$worktree_id" in
+            [0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef][0123456789abcdef])
+                ;;
+            *)
+                worktree_id=''
+                ;;
+        esac
 
-    case "$name" in
-        [0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF][0123456789abcdefABCDEF])
-            worktree_id=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
-            ;;
-        *)
-            worktree_id=$(printf '%s' "$name" | git hash-object --stdin | cut -c 1-6) || {
-                printf '%s\n' 'git-worktree-create: could not hash NAME' >&2
-                return 1
-            }
-            ;;
-    esac
+        if [ -n "$worktree_id" ]; then
+            worktree_path=$main_root/.worktrees/$worktree_id
+            if [ ! -e "$worktree_path" ] &&
+                ! git show-ref --verify --quiet "refs/heads/$worktree_id"; then
+                break
+            fi
+        fi
 
-    worktree_path=$main_root/.worktrees/$worktree_id
-    if [ -e "$worktree_path" ]; then
-        printf 'git-worktree-create: worktree path already exists: %s\n' "$worktree_path" >&2
-        return 1
-    fi
-    if git show-ref --verify --quiet "refs/heads/$worktree_id"; then
-        printf 'git-worktree-create: branch already exists: %s\n' "$worktree_id" >&2
-        return 1
-    fi
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 10 ]; then
+            printf '%s\n' 'git-worktree-create: could not find an unused worktree ID' >&2
+            return 1
+        fi
+    done
 
     # .worktrees is local orchestration state, not project content.
     exclude_file=$(git rev-parse --git-path info/exclude)

@@ -59,6 +59,12 @@ When("I click the {string} button", function (label) {
   button.click();
 });
 
+When("I try to dismiss the result dialog", function () {
+  const dialog = this.dom.window.document.querySelector("#result-dialog");
+  const cancelEvent = new this.dom.window.Event("cancel", { cancelable: true });
+  dialog.dispatchEvent(cancelEvent);
+});
+
 Then("the home screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, false);
 });
@@ -95,6 +101,18 @@ Then("the board contains {string} in cells {int}, {int}, and {int}", function (m
   for (const number of [first, second, third]) {
     assert.equal(this.cell(number).textContent, mark);
   }
+});
+
+
+Then("the result dialog says {string}", function (expected) {
+  const dialog = this.dom.window.document.querySelector("#result-dialog");
+  assert.equal(dialog.open, true);
+  assert.equal(dialog.querySelector("#result-message").textContent, expected);
+});
+
+Then("the result dialog has a {string} button", function (label) {
+  const dialog = this.dom.window.document.querySelector("#result-dialog");
+  assert.ok([...dialog.querySelectorAll("button")].some((button) => button.textContent === label));
 });
 
 Then("all board cells are disabled", function () {

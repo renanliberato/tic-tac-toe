@@ -40,13 +40,21 @@ Feature: Playing a game of tic-tac-toe
     Then cell 1 contains "X"
     And the status says "Player O's turn"
 
-  Scenario: A new game resets the board
+  Scenario: Continuing after a win returns to the home screen
     Given I open the tic-tac-toe game
     When I click the "Start game" button
     And I click cell 1
-    And I click the "New game" button
-    Then all board cells are empty
-    And the status says "Player X's turn"
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    Then the result dialog says "X Won"
+    And the result dialog has a "Continue" button
+    When I try to dismiss the result dialog
+    Then the result dialog says "X Won"
+    When I click the "Continue" button
+    Then the home screen is visible
+    And the game board is hidden
 
   Scenario: The game ends in a draw when the board is full
     Given I open the tic-tac-toe game
@@ -61,4 +69,5 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 7
     And I click cell 9
     Then the status says "It's a draw!"
+    And the result dialog says "Draw"
     And all board cells are disabled

@@ -11,6 +11,17 @@ release_lock() {
     fi
 }
 
+cleanup_worktree() {
+    if ! git worktree remove --force "$repo_root"; then
+        printf 'git-worktree-merge: could not remove worktree: %s\n' "$repo_root" >&2
+        return 1
+    fi
+    if ! git branch -d "$worktree_branch"; then
+        printf 'git-worktree-merge: could not delete branch: %s\n' "$worktree_branch" >&2
+        return 1
+    fi
+}
+
 main() {
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
         printf '%s\n' 'git-worktree-merge: not inside a Git work tree' >&2
@@ -78,7 +89,12 @@ main() {
     fi
 
     if git merge --no-edit "origin/$worktree_branch"; then
-        printf 'Merged worktree branch %s into %s\n' "$worktree_branch" "$(git branch --show-current)"
+        if ! cleanup_worktree; then
+            release_lock
+            trap - INT TERM HUP EXIT
+            return 1
+        fi
+        printf 'Merged worktree branch %s into %s and removed the worktree\n' "$worktree_branch" "$(git branch --show-current)"
         release_lock
         trap - INT TERM HUP EXIT
         return 0
@@ -110,6 +126,15 @@ TASK
         fi
         mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null
         status=$?
+        if [ "$status" -eq 0 ]; then
+            merge_head=$(git rev-parse --git-path MERGE_HEAD)
+            if [ -f "$merge_head" ] || [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
+                printf '%s\n' 'git-worktree-merge: conflict resolver did not complete the merge' >&2
+                status=1
+            elif ! cleanup_worktree; then
+                status=1
+            fi
+        fi
         release_lock
         trap - INT TERM HUP EXIT
         return "$status"
