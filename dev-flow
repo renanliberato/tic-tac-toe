@@ -1,0 +1,25 @@
+#!/bin/sh
+# Run the complete synchronized worktree development flow.
+#
+# This script deliberately performs `cd` itself. A child process such as
+# ./git-worktree-create or xargs cannot change the directory of this script's
+# caller, but this script can change its own directory before running the
+# remaining commands.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    printf '%s\n' 'dev-flow: not inside a Git work tree' >&2
+    exit 1
+}
+cd "$repo_root" || exit 1
+
+./git-sync
+worktree_path=$(./git-worktree-create)
+cd "$worktree_path" || exit 1
+
+./git-save
+mswea codex:gpt-5.6-luna@high --yolo --exit-immediately
+./git-commit
+./ensure-tests
+./git-worktree-merge

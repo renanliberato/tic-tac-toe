@@ -1,14 +1,16 @@
 #!/bin/sh
-# Create a short-lived linked worktree and enter it when this file is sourced.
-# An executable child process cannot change its caller's directory; use
-# `. ./git-worktree-create` when the current interactive shell must move.
+# Create a short-lived linked worktree.
+#
+# When sourced (`. ./git-worktree-create`), this file also changes the current
+# shell to the new worktree. When executed, it cannot change the caller's
+# directory, so it prints the path for `cd "$(./git-worktree-create)"`.
 
 set -u
 
 main() {
     if [ "$#" -ne 0 ]; then
-        printf 'Usage: ./%s\n' "$(basename "$0")" >&2
-        printf '%s\n' '       . ./'"$(basename "$0")"'  # also change this shell directory' >&2
+        printf '%s\n' 'Usage: ./git-worktree-create' >&2
+        printf '%s\n' '       . ./git-worktree-create  # also change this shell directory' >&2
         return 2
     fi
 
@@ -68,15 +70,15 @@ main() {
     fi
     mkdir -p "$main_root/.worktrees" || return 1
 
-    git worktree add -b "$worktree_id" "$worktree_path" HEAD || return 1
+    git worktree add -b "$worktree_id" "$worktree_path" HEAD >/dev/null || return 1
     cd "$worktree_path" || return 1
 
-    printf 'Created worktree %s on branch %s\n' "$worktree_path" "$worktree_id"
-    printf 'Shell directory: %s\n' "$worktree_path"
+    # Keep stdout machine-readable: callers can safely use command substitution.
+    printf '%s\n' "$worktree_path"
 }
 
 main "$@"
 status=$?
-# `return` succeeds only when this file was sourced. Otherwise fall back to
-# exit, keeping normal executable invocation useful as well.
+# `return` succeeds when sourced and leaves the caller in the new worktree.
+# When executed, it fails and the final `exit` returns the creation status.
 return "$status" 2>/dev/null || exit "$status"
