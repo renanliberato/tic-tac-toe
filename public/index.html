@@ -19,7 +19,7 @@
         </section>
 
         <section id="game-screen" class="screen" aria-labelledby="status" hidden>
-            <p id="status" role="status">Player X's turn</p>
+            <p id="status" class="status" role="status">Player X's turn</p>
             <div class="board" aria-label="Tic-Tac-Toe board">
                 <button class="cell" type="button" data-cell="0" aria-label="Cell 1"></button>
                 <button class="cell" type="button" data-cell="1" aria-label="Cell 2"></button>
@@ -34,7 +34,9 @@
         </section>
 
         <dialog id="result-dialog" aria-labelledby="result-message">
+            <p class="result-eyebrow">Game over</p>
             <h2 id="result-message"></h2>
+            <p id="result-detail"></p>
             <button id="continue" type="button">Continue</button>
         </dialog>
     </main>

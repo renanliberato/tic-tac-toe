@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGame, getWinner, makeMove } from "../public/js/game.js";
+import { createGame, getWinner, getWinningLine, makeMove } from "../public/js/game.js";
 
 describe("tic-tac-toe", () => {
   it("starts with an empty board and X", () => {
@@ -18,6 +18,11 @@ describe("tic-tac-toe", () => {
 
     expect(game.winner).toBe("X");
     expect(getWinner(game.board)).toBe("X");
+    expect(getWinningLine(game.board)).toEqual([0, 1, 2]);
+  });
+
+  it("returns no winning line when the board has no winner", () => {
+    expect(getWinningLine(createGame().board)).toBeNull();
   });
 
   it("does not overwrite an occupied cell", () => {

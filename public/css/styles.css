@@ -2,16 +2,126 @@
   text-align: center;
 }
 
-.board {
+.game .board {
   display: grid;
-  grid-template-columns: repeat(3, 5rem);
+  grid-template-columns: repeat(3, minmax(4.5rem, 5rem));
   justify-content: center;
   gap: .5rem;
   margin: 1.5rem 0;
+  padding: .75rem;
+  border: 2px solid currentColor;
+  border-radius: 1rem;
+  transition: transform .2s ease, box-shadow .2s ease;
 }
 
-.cell {
+.game .cell {
   aspect-ratio: 1;
+  min-width: 0;
   font-size: 2rem;
   font-weight: bold;
+  line-height: 1;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.game .cell:not(:disabled):hover {
+  transform: translateY(-.15rem) scale(1.03);
+}
+
+.game .cell:not(:disabled):active {
+  transform: translateY(.08rem) scale(.96);
+}
+
+.game .cell[data-mark="X"] {
+  color: #b42318;
+}
+
+.game .cell[data-mark="O"] {
+  color: #175cd3;
+}
+
+.game .cell--winner {
+  box-shadow: 0 0 0 .2rem currentColor;
+  animation: winning-cell .65s ease-in-out infinite alternate;
+}
+
+.game .status {
+  min-height: 1.5em;
+  font-weight: 600;
+}
+
+.game .status--winner {
+  font-size: 1.15em;
+}
+
+.game .result-eyebrow {
+  margin-bottom: .25rem;
+  font-size: .8em;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.game #result-detail {
+  margin-top: -.5rem;
+}
+
+.game.game--celebrating .board {
+  box-shadow: 0 0 0 .35rem currentColor;
+}
+
+.game .board--winner {
+  animation: board-celebrate .65s ease-out;
+}
+
+.game .board--draw {
+  animation: board-wiggle .45s ease-in-out;
+}
+
+.game .cell--placed {
+  animation: mark-pop .28s cubic-bezier(.2, .8, .3, 1.25);
+}
+
+.game .status--updated {
+  animation: status-bump .28s ease-out;
+}
+
+@keyframes mark-pop {
+  0% { transform: scale(.45) rotate(-8deg); opacity: .2; }
+  70% { transform: scale(1.15) rotate(2deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@keyframes winning-cell {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+@keyframes status-bump {
+  50% { transform: scale(1.08); }
+}
+
+@keyframes board-celebrate {
+  20% { transform: scale(1.04) rotate(-1deg); }
+  45% { transform: scale(1.04) rotate(1deg); }
+  70% { transform: scale(1.02) rotate(-.5deg); }
+}
+
+@keyframes board-wiggle {
+  25% { transform: translateX(-.3rem); }
+  75% { transform: translateX(.3rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game .cell,
+  .game .board {
+    transition: none;
+  }
+
+  .game .cell--placed,
+  .game .cell--winner,
+  .game .status--updated,
+  .game .board--winner,
+  .game .board--draw {
+    animation: none;
+  }
 }

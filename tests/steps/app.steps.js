@@ -103,11 +103,26 @@ Then("the board contains {string} in cells {int}, {int}, and {int}", function (m
   }
 });
 
+Then("the winning cells are highlighted", function () {
+  assert.deepEqual(
+    this.cells().filter((cell) => cell.classList.contains("cell--winner")).map((cell) => cell.dataset.cell),
+    ["0", "1", "2"]
+  );
+});
+
+Then("cell {int} has the accessibility label {string}", function (number, expected) {
+  assert.equal(this.cell(number).getAttribute("aria-label"), expected);
+});
 
 Then("the result dialog says {string}", function (expected) {
   const dialog = this.dom.window.document.querySelector("#result-dialog");
   assert.equal(dialog.open, true);
   assert.equal(dialog.querySelector("#result-message").textContent, expected);
+});
+
+Then("the result dialog detail says {string}", function (expected) {
+  const dialog = this.dom.window.document.querySelector("#result-dialog");
+  assert.equal(dialog.querySelector("#result-detail").textContent, expected);
 });
 
 Then("the result dialog has a {string} button", function (label) {
