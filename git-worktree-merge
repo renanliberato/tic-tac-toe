@@ -16,6 +16,27 @@ cleanup_worktree() {
         printf 'git-worktree-merge: could not remove worktree: %s\n' "$repo_root" >&2
         return 1
     fi
+
+    # Git normally removes the checkout directory too. Remove it explicitly if
+    # a Git version or filesystem leaves the now-unregistered path behind.
+    if [ -e "$repo_root" ] || [ -L "$repo_root" ]; then
+        if ! rm -rf "$repo_root"; then
+            printf 'git-worktree-merge: could not remove worktree directory: %s\n' "$repo_root" >&2
+            return 1
+        fi
+    fi
+    if [ -e "$repo_root" ] || [ -L "$repo_root" ]; then
+        printf 'git-worktree-merge: worktree directory still exists: %s\n' "$repo_root" >&2
+        return 1
+    fi
+
+    # Do not leave an empty orchestration directory behind, but never remove it
+    # while it contains another linked worktree (or unrelated user content).
+    worktree_parent=${repo_root%/*}
+    if [ "$worktree_parent" = "$main_root/.worktrees" ]; then
+        rmdir "$worktree_parent" 2>/dev/null || :
+    fi
+
     if ! git branch -d "$worktree_branch"; then
         printf 'git-worktree-merge: could not delete branch: %s\n' "$worktree_branch" >&2
         return 1
