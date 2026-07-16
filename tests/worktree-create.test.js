@@ -31,6 +31,10 @@ function worktreeCount(cwd) {
   return runGit(cwd, "worktree", "list", "--porcelain").match(/^worktree /gm)?.length ?? 0;
 }
 
+function mergeLockPath(cwd) {
+  return path.resolve(cwd, runGit(cwd, "rev-parse", "--git-common-dir").trim(), "git-worktree-merge.lock");
+}
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -50,6 +54,41 @@ describe("git-worktree-create", () => {
     expect(before).toBe(realpathSync(repository));
     expect(after).toBe(realpathSync(repository));
     expect(worktreePath).toMatch(new RegExp(`${escapeRegExp(realpathSync(repository))}/\\.worktrees/[0-9a-f]{6}$`));
+    expect(worktreeCount(repository)).toBe(2);
+  });
+
+  it("refuses to create a worktree while a merge holds the lock", () => {
+    const repository = createRepository();
+    const lock = mergeLockPath(repository);
+    writeFileSync(lock, "merge in progress\n");
+
+    const result = spawnSync("./git-worktree-create", [], {
+      cwd: repository,
+      encoding: "utf8"
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("git-worktree-create: another merge holds");
+    expect(worktreeCount(repository)).toBe(1);
+  });
+
+  it("uses the common lock when invoked from a linked worktree", () => {
+    const repository = createRepository();
+    const creation = spawnSync("./git-worktree-create", [], {
+      cwd: repository,
+      encoding: "utf8"
+    });
+    const linkedWorktree = creation.stdout.trim();
+    writeFileSync(mergeLockPath(repository), "merge in progress\n");
+
+    const result = spawnSync("./git-worktree-create", [], {
+      cwd: linkedWorktree,
+      encoding: "utf8"
+    });
+
+    expect(creation.status).toBe(0);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("git-worktree-create: another merge holds");
     expect(worktreeCount(repository)).toBe(2);
   });
 

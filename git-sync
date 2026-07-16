@@ -3,11 +3,35 @@
 
 set -u
 
+release_merge_lock() {
+    if [ "${merge_lock_owned-false}" = true ]; then
+        rm -f "$merge_lock"
+        merge_lock_owned=false
+    fi
+}
+
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
     printf '%s\n' 'git-sync: not inside a Git work tree' >&2
     exit 1
 }
 cd "$repo_root" || exit 1
+
+git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || {
+    printf '%s\n' 'git-sync: could not locate the common Git directory' >&2
+    exit 1
+}
+case "$git_common_dir" in
+    /*) ;;
+    *) git_common_dir="$repo_root/$git_common_dir" ;;
+esac
+merge_lock="$git_common_dir/git-worktree-merge.lock"
+if ! (set -C; : > "$merge_lock") 2>/dev/null; then
+    printf 'git-sync: another merge holds %s\n' "$merge_lock" >&2
+    exit 1
+fi
+merge_lock_owned=true
+printf '%s\n' "$$" > "$merge_lock"
+trap release_merge_lock INT TERM HUP EXIT
 
 if ! git fetch; then
     printf '%s\n' 'git-sync: git fetch failed' >&2

@@ -4,6 +4,21 @@
 
 set -u
 
+acquire_lock() {
+    git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+    case "$git_common_dir" in
+        /*) ;;
+        *) git_common_dir="$main_root/$git_common_dir" ;;
+    esac
+    merge_lock="$git_common_dir/git-worktree-merge.lock"
+    if (set -C; : > "$merge_lock") 2>/dev/null; then
+        merge_lock_owned=true
+        printf '%s\n' "$$" > "$merge_lock"
+        return 0
+    fi
+    return 1
+}
+
 release_lock() {
     if [ "${merge_lock_owned-false}" = true ]; then
         rm -f "$merge_lock"
@@ -90,15 +105,16 @@ main() {
     cd "$main_root" || return 1
     "$main_root/git-sync" || return 1
 
-    # noclobber makes creation fail if another merge owns this lock. The
-    # operation is intentionally local to the repository's common Git dir.
-    merge_lock=$(git rev-parse --git-path git-worktree-merge.lock)
+    # The lock lives in the common Git directory so it is shared by the
+    # primary checkout and every linked worktree.
+    merge_lock=''
     merge_lock_owned=false
-    if (set -C; : > "$merge_lock") 2>/dev/null; then
-        merge_lock_owned=true
-        printf '%s\n' "$$" > "$merge_lock"
-    else
-        printf 'git-worktree-merge: another merge holds %s\n' "$merge_lock" >&2
+    if ! acquire_lock; then
+        if [ -n "$merge_lock" ]; then
+            printf 'git-worktree-merge: another merge holds %s\n' "$merge_lock" >&2
+        else
+            printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
+        fi
         return 1
     fi
     trap release_lock INT TERM HUP EXIT
