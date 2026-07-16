@@ -32,11 +32,26 @@ describe("dialog layout", () => {
 
 function browserPath() {
   const configuredPath = env.BROWSER_PATH ?? env.CHROME_PATH ?? env.CHROMIUM_PATH;
-  const executablePath = configuredPath ?? puppeteer.executablePath();
+  let managedPath;
 
-  if (!executablePath || !existsSync(executablePath)) {
+  try {
+    managedPath = puppeteer.executablePath();
+  } catch {
+    managedPath = undefined;
+  }
+
+  const executablePath = [
+    configuredPath,
+    managedPath,
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser"
+  ].find((candidate) => candidate && existsSync(candidate));
+
+  if (!executablePath) {
     throw new Error(
-      "The rendered dialog layout test requires a Chromium executable. Run `npm install` to install Puppeteer’s managed browser, or set BROWSER_PATH to an installed browser."
+      "The rendered dialog layout test requires a Chromium executable. Run `npm install` to install Puppeteer’s managed browser, set BROWSER_PATH to an installed browser, or install Chrome/Chromium in a standard system location."
     );
   }
 
