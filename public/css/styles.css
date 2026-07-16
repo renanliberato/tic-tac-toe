@@ -160,6 +160,7 @@ body {
 .game dialog {
   box-sizing: border-box;
   width: min(28rem, calc(100% - 2rem));
+  margin: auto;
   max-width: none;
   padding: 2rem;
   background: var(--nc-bg-1, Canvas);
