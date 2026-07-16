@@ -1,11 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
+import { PLAYER_STORAGE_KEY } from "../public/js/player.js";
 
 const cellsMarkup = Array.from({ length: 9 }, (_, index) =>
   `<button data-cell="${index}" type="button"></button>`
 ).join("");
 
 let dom;
+
+function createStorage() {
+  const values = new Map();
+
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key)
+  };
+}
 
 function setBoardMetrics() {
   const board = document.querySelector(".board");
@@ -51,9 +62,33 @@ afterEach(() => {
   vi.useRealTimers();
   dom.window.close();
   delete globalThis.document;
+  delete globalThis.localStorage;
 });
 
 describe("game entry point", () => {
+  it("creates player data on startup and updates it after a move", async () => {
+    const storage = createStorage();
+    globalThis.localStorage = storage;
+
+    await import("../public/js/main.js?player-data");
+
+    const initialPlayer = JSON.parse(storage.getItem(PLAYER_STORAGE_KEY));
+    expect(initialPlayer.player_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(Object.keys(initialPlayer)[0]).toBe("player_id");
+
+    document.querySelector("#start-game").click();
+    vi.advanceTimersByTime(3000);
+    document.querySelector("[data-cell=\"0\"]").click();
+
+    const updatedPlayer = JSON.parse(storage.getItem(PLAYER_STORAGE_KEY));
+    expect(updatedPlayer.player_id).toBe(initialPlayer.player_id);
+    expect(updatedPlayer.games_played).toBe(1);
+    expect(updatedPlayer.moves_played).toBe(1);
+    expect(updatedPlayer.last_move).toEqual({ cell: 0, mark: "X" });
+  });
+
   it("keeps the home screen visible and board controls disabled initially", async () => {
     await import("../public/js/main.js?unit");
 

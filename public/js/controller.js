@@ -1,4 +1,10 @@
 import { getWinningLine } from "./game.js";
+import {
+  getOrCreatePlayer,
+  startPlayerGame,
+  updatePlayerAfterMove,
+  updatePlayerAfterResult
+} from "./player.js";
 
 const MATCHMAKING_DURATION = 3000;
 
@@ -13,6 +19,8 @@ export class GameController {
     this.timer = timer;
     this.gameStarted = false;
     this.matchmakingTimer = null;
+    this.player = getOrCreatePlayer();
+    this.resultRecorded = false;
 
     this.model.subscribe(() => this.render());
     this.bindViewEvents();
@@ -37,8 +45,10 @@ export class GameController {
   play(index) {
     if (!this.gameStarted || !this.model.makeMove(index)) return;
 
-    this.view.replayMove(index);
+    this.player = updatePlayerAfterMove(this.player, this.model.getState(), index);
     const state = this.model.getState();
+    this.recordResult(state);
+    this.view.replayMove(index);
     if (state.winner) {
       this.view.animateWinningLine(getWinningLine(state.board)).then(() => this.showResult());
     } else if (state.draw) {
@@ -67,6 +77,8 @@ export class GameController {
     this.view.closeResultDialog();
     this.view.resetFeedback();
     this.gameStarted = true;
+    this.resultRecorded = false;
+    this.player = startPlayerGame(this.player);
     this.model.reset();
     this.view.showGame();
     this.render();
@@ -87,6 +99,13 @@ export class GameController {
       this.matchmakingTimer = null;
     }
     this.view.closeMatchmakingDialog();
+  }
+
+  recordResult(state) {
+    if (this.resultRecorded || (!state.winner && !state.draw)) return;
+
+    this.player = updatePlayerAfterResult(this.player, state);
+    this.resultRecorded = true;
   }
 
   showResult() {

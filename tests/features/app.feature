@@ -49,6 +49,41 @@ Feature: Playing a game of tic-tac-toe
     And the result dialog detail says "Three in a row!"
     And all board cells are disabled
 
+  Scenario: A completed win persists player statistics
+    Given I open the tic-tac-toe game
+    When I click the "Start game" button
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    Then the result dialog says "X Won"
+    And player statistics include:
+      | games_played | 1 |
+      | moves_played | 5 |
+      | wins         | 1 |
+      | draws        | 0 |
+      | losses       | 0 |
+      | last_move    | {"cell":2,"mark":"X"} |
+
+  Scenario: An opponent win persists a player loss
+    Given I open the tic-tac-toe game
+    When I click the "Start game" button
+    And I click cell 2
+    And I click cell 1
+    And I click cell 3
+    And I click cell 4
+    And I click cell 5
+    And I click cell 7
+    Then the result dialog says "O Won"
+    And player statistics include:
+      | games_played | 1 |
+      | moves_played | 6 |
+      | wins         | 1 |
+      | draws        | 0 |
+      | losses       | 1 |
+      | last_move    | {"cell":6,"mark":"O"} |
+
   Scenario: An occupied cell cannot be overwritten
     Given I open the tic-tac-toe game
     When I click the "Start game" button
@@ -88,6 +123,13 @@ Feature: Playing a game of tic-tac-toe
     Then the status says "It's a draw!"
     And the result dialog says "Draw"
     And the result dialog detail says "No spaces left on the board."
+    And player statistics include:
+      | games_played | 1 |
+      | moves_played | 9 |
+      | wins         | 0 |
+      | draws        | 1 |
+      | losses       | 0 |
+      | last_move    | {"cell":8,"mark":"X"} |
     And all board cells are disabled
 
   Scenario: The game page scales to fit the viewport

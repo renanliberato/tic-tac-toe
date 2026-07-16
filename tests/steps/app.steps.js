@@ -182,6 +182,19 @@ Then("the result dialog detail says {string}", async function (expected) {
   assert.equal(dialog.querySelector("#result-detail").textContent, expected);
 });
 
+Then("player statistics include:", function (dataTable) {
+  const stored = this.dom.window.localStorage.getItem("tic-tac-toe-player");
+  assert.ok(stored, "Player statistics are not persisted");
+
+  const player = JSON.parse(stored);
+  assert.match(player.player_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+
+  for (const [field, expected] of Object.entries(dataTable.rowsHash())) {
+    const actual = field === "last_move" ? JSON.stringify(player[field]) : String(player[field]);
+    assert.equal(actual, expected, `Unexpected player statistic for ${field}`);
+  }
+});
+
 Then("the result dialog has a {string} button", function (label) {
   const dialog = this.dom.window.document.querySelector("#result-dialog");
   assert.ok([...dialog.querySelectorAll("button")].some((button) => button.textContent === label));
