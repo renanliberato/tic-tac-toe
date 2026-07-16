@@ -71,3 +71,9 @@ Feature: Playing a game of tic-tac-toe
     Then the status says "It's a draw!"
     And the result dialog says "Draw"
     And all board cells are disabled
+
+  Scenario: The game page scales to fit the viewport
+    Given I open the tic-tac-toe game
+    Then the page scale fits the viewport
+    When I resize the viewport to 375 by 900
+    Then the page scale fits the viewport

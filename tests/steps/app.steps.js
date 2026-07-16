@@ -52,6 +52,12 @@ When("I click cell {int}", function (number) {
   this.cell(number).click();
 });
 
+When("I resize the viewport to {int} by {int}", function (width, height) {
+  Object.defineProperty(this.dom.window, "innerWidth", { configurable: true, value: width });
+  Object.defineProperty(this.dom.window, "innerHeight", { configurable: true, value: height });
+  this.dom.window.dispatchEvent(new this.dom.window.Event("resize"));
+});
+
 When("I click the {string} button", function (label) {
   const button = [...this.dom.window.document.querySelectorAll("button")]
     .find((candidate) => candidate.textContent === label);
@@ -63,6 +69,16 @@ When("I try to dismiss the result dialog", function () {
   const dialog = this.dom.window.document.querySelector("#result-dialog");
   const cancelEvent = new this.dom.window.Event("cancel", { cancelable: true });
   dialog.dispatchEvent(cancelEvent);
+});
+
+Then("the page scale fits the viewport", function () {
+  const page = this.dom.window.document.querySelector(".game");
+  const expectedScale = Math.min(
+    this.dom.window.innerWidth / 1125,
+    this.dom.window.innerHeight / 2436
+  );
+
+  assert.equal(page.style.getPropertyValue("--page-scale"), String(expectedScale));
 });
 
 Then("the home screen is visible", function () {
