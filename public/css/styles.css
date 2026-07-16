@@ -418,6 +418,14 @@ body {
   line-height: 1.1;
 }
 
+.game .matchmaking-dialog {
+  font-size: 16px;
+}
+
+.game .matchmaking-dialog h2 {
+  font-size: 28px;
+}
+
 .game dialog button {
   margin-top: 16px;
 }
