@@ -45,12 +45,15 @@ body {
 }
 
 .game > h1 {
-  width: 100%;
-  margin: 96px auto 112px;
-  padding: 0 0 32px;
-  border-bottom: 2px solid currentColor;
-  font-size: 96px;
-  line-height: 1.1;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .game .screen {
@@ -66,10 +69,11 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin: 0 auto;
+  margin: auto;
   padding: 72px 64px;
-  border: 2px solid var(--nc-bg-3, currentColor);
-  border-radius: 32px;
+  border-width: 2px 0;
+  border-style: solid;
+  border-color: var(--nc-bg-3, currentColor);
 }
 
 .game #home-screen[hidden] {
@@ -77,11 +81,12 @@ body {
 }
 
 .game #home-screen h2 {
-  margin: 0 0 28px;
+  margin: 0 0 56px;
   padding: 0;
   border: 0;
   font-size: 64px;
   line-height: 1.1;
+  letter-spacing: .08em;
 }
 
 .game #home-screen p {
@@ -94,6 +99,16 @@ body {
 .game button {
   font-size: 36px;
   line-height: 1.2;
+}
+
+.game #start-game {
+  min-width: 240px;
+  font-size: 0;
+}
+
+.game #start-game::after {
+  content: "Play";
+  font-size: 36px;
 }
 
 .game #game-screen {
