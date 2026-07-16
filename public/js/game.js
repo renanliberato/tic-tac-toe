@@ -23,9 +23,13 @@ export function makeMove(game, index) {
   };
 }
 
-export function getWinner(board) {
-  const line = WINNING_LINES.find(([a, b, c]) => (
+export function getWinningLine(board) {
+  return WINNING_LINES.find(([a, b, c]) => (
     board[a] && board[a] === board[b] && board[a] === board[c]
-  ));
+  )) || null;
+}
+
+export function getWinner(board) {
+  const line = getWinningLine(board);
   return line ? board[line[0]] : null;
 }

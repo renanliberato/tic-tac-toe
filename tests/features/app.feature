@@ -30,6 +30,9 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 3
     Then the status says "Player X wins!"
     And the board contains "X" in cells 1, 2, and 3
+    And the winning cells are highlighted
+    And cell 1 has the accessibility label "Cell 1, X"
+    And the result dialog detail says "Three in a row!"
     And all board cells are disabled
 
   Scenario: An occupied cell cannot be overwritten
@@ -70,6 +73,7 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 9
     Then the status says "It's a draw!"
     And the result dialog says "Draw"
+    And the result dialog detail says "No spaces left on the board."
     And all board cells are disabled
 
   Scenario: The game page scales to fit the viewport
