@@ -1,5 +1,36 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+}
+
+.page-viewport {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
 .game {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 1125px;
+  height: 2436px;
+  max-width: none;
+  margin: 0;
+  overflow: hidden;
   text-align: center;
+  transform: scale(var(--page-scale, 1));
+  transform-origin: center;
 }
 
 .board {

@@ -1,5 +1,7 @@
 import { createGame, makeMove } from "./game.js";
+import { applyPageScale } from "./layout.js";
 
+const page = document.querySelector(".game");
 const homeScreen = document.querySelector("#home-screen");
 const gameScreen = document.querySelector("#game-screen");
 const start = document.querySelector("#start-game");
@@ -10,6 +12,8 @@ const resultMessage = document.querySelector("#result-message");
 const continueButton = document.querySelector("#continue");
 let game = createGame();
 let gameStarted = false;
+
+applyPageScale(page, document.defaultView);
 
 function render() {
   cells.forEach((cell, index) => {

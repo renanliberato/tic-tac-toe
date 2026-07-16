@@ -10,7 +10,7 @@ let dom;
 beforeEach(() => {
   vi.resetModules();
   dom = new JSDOM(`
-    <main>
+    <main class="game">
       <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
       <section id="game-screen" hidden>
         <p id="status"></p>
@@ -37,6 +37,18 @@ describe("game entry point", () => {
     expect(document.querySelector("#home-screen").hidden).toBe(false);
     expect(document.querySelector("#game-screen").hidden).toBe(true);
     expect([...document.querySelectorAll("[data-cell]")].every((cell) => cell.disabled)).toBe(true);
+  });
+
+  it("applies the initial viewport scale to the game page", async () => {
+    await import("../public/js/main.js?page-scale");
+
+    const expectedScale = Math.min(
+      dom.window.innerWidth / 1125,
+      dom.window.innerHeight / 2436
+    );
+
+    expect(document.querySelector(".game").style.getPropertyValue("--page-scale"))
+      .toBe(String(expectedScale));
   });
 
   it("starts a fresh game when Start game is clicked", async () => {
