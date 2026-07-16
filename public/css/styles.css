@@ -72,6 +72,10 @@ body {
   border-radius: 32px;
 }
 
+.game #home-screen[hidden] {
+  display: none;
+}
+
 .game #home-screen h2 {
   margin: 0 0 28px;
   padding: 0;

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { JSDOM } from "jsdom";
 
 const styles = readFileSync(new URL("../public/css/styles.css", import.meta.url), "utf8");
 
@@ -10,6 +11,23 @@ function dialogRule() {
 describe("dialog layout", () => {
   it("keeps the result dialog centered despite the theme margin reset", () => {
     expect(dialogRule()).toMatch(/(?:^|\n)\s*margin:\s*auto\s*;/);
+  });
+});
+
+describe("screen visibility", () => {
+  it("keeps a hidden home screen out of the rendered layout", () => {
+    const dom = new JSDOM(`
+      <style>${styles}</style>
+      <main class="game">
+        <section id="home-screen" hidden>Home</section>
+      </main>
+    `);
+    const homeScreen = dom.window.document.querySelector("#home-screen");
+
+    expect(homeScreen.hidden).toBe(true);
+    expect(dom.window.getComputedStyle(homeScreen).display).toBe("none");
+
+    dom.window.close();
   });
 });
 
