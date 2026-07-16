@@ -1,5 +1,11 @@
 import { createGame, getWinningLine, makeMove } from "./game.js";
 import { applyPageScale } from "./layout.js";
+import {
+  getOrCreatePlayer,
+  startPlayerGame,
+  updatePlayerAfterMove,
+  updatePlayerAfterResult
+} from "./player.js";
 
 const gameRoot = document.querySelector(".game");
 const homeScreen = document.querySelector("#home-screen");
@@ -28,6 +34,7 @@ if (!winningLineElement && board) {
   board.append(winningLineElement);
 }
 let game = createGame();
+let player = getOrCreatePlayer();
 let gameStarted = false;
 let matchmakingTimer = null;
 
@@ -179,6 +186,7 @@ function animateWinningLine(line) {
 function showResult() {
   if ((!game.winner && !game.draw) || !resultDialog || resultDialog.open) return;
 
+  player = updatePlayerAfterResult(player, game);
   resultMessage.textContent = game.winner ? `${game.winner} Won` : "Draw";
   if (resultDetail) {
     resultDetail.textContent = game.winner
@@ -258,6 +266,7 @@ function showGame() {
   closeResultDialog();
   resetFeedback();
   game = createGame();
+  player = startPlayerGame(player);
   gameStarted = true;
   homeScreen.hidden = true;
   gameScreen.hidden = false;
@@ -284,6 +293,7 @@ cells.forEach((cell, index) => {
 
     if (game === previousGame) return;
 
+    player = updatePlayerAfterMove(player, game, index);
     render();
     replayAnimation(cell, "cell--placed");
     replayAnimation(status, "status--updated");
