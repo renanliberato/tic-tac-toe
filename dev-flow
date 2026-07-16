@@ -19,7 +19,11 @@ worktree_path=$(./git-worktree-create)
 cd "$worktree_path" || exit 1
 
 ./git-save
-mswea codex:gpt-5.6-luna@high --yolo --exit-immediately
+if [ "$#" -gt 0 ]; then
+    mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$*"
+else
+    mswea codex:gpt-5.6-luna@high --yolo --exit-immediately
+fi
 ./git-commit
 ./ensure-tests
 ./code-review
