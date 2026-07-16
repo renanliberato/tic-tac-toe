@@ -100,6 +100,7 @@ body {
 .game .board {
   box-sizing: border-box;
   display: grid;
+  position: relative;
   width: min(100%, var(--board-width));
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
@@ -139,6 +140,59 @@ body {
 .game .cell--winner {
   box-shadow: 0 0 0 .2rem currentColor;
   animation: winning-cell .65s ease-in-out infinite alternate;
+}
+
+.game .winning-line {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px var(--nc-bg-1, Canvas);
+  opacity: 0;
+  pointer-events: none;
+  transform: rotate(var(--winning-line-angle, 0rad)) scaleX(0);
+  transform-origin: left center;
+}
+
+.game .winning-line--row-0,
+.game .winning-line--row-1,
+.game .winning-line--row-2 {
+  left: 8%;
+  width: 84%;
+}
+
+.game .winning-line--row-0 { top: 16.67%; }
+.game .winning-line--row-1 { top: 50%; }
+.game .winning-line--row-2 { top: 83.33%; }
+
+.game .winning-line--column-0,
+.game .winning-line--column-1,
+.game .winning-line--column-2 {
+  top: 16.67%;
+  width: 84%;
+  --winning-line-angle: 90deg;
+}
+
+.game .winning-line--column-0 { left: 16.67%; }
+.game .winning-line--column-1 { left: 50%; }
+.game .winning-line--column-2 { left: 83.33%; }
+
+.game .winning-line--diagonal-main,
+.game .winning-line--diagonal-reverse {
+  top: 50%;
+  left: 1%;
+  width: 98%;
+  --winning-line-angle: 45deg;
+}
+
+.game .winning-line--diagonal-reverse {
+  --winning-line-angle: -45deg;
+}
+
+.game .winning-line--active {
+  animation: winning-line-draw .7s ease-out forwards;
 }
 
 .game .status {
@@ -191,6 +245,17 @@ body {
   100% { transform: scale(1) rotate(0); opacity: 1; }
 }
 
+@keyframes winning-line-draw {
+  from {
+    opacity: .25;
+    transform: rotate(var(--winning-line-angle, 0rad)) scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--winning-line-angle, 0rad)) scaleX(1);
+  }
+}
+
 @keyframes winning-cell {
   from { transform: scale(1); }
   to { transform: scale(1.08); }
@@ -219,10 +284,16 @@ body {
 
   .game .cell--placed,
   .game .cell--winner,
+  .game .winning-line--active,
   .game .status--updated,
   .game .board--winner,
   .game .board--draw {
     animation: none;
+  }
+
+  .game .winning-line--active {
+    opacity: 1;
+    transform: rotate(var(--winning-line-angle, 0rad)) scaleX(1);
   }
 }
 

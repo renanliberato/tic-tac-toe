@@ -148,18 +148,37 @@ Then("the winning cells are highlighted", function () {
   );
 });
 
+Then("the result dialog is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#result-dialog").open, false);
+});
+
+Then("the winning line is shown for cells {int}, {int}, and {int}", function (first, second, third) {
+  const line = this.dom.window.document.querySelector("[data-winning-line]");
+  assert.equal(line.hidden, false);
+  assert.equal(line.dataset.line, [first - 1, second - 1, third - 1].join(","));
+  assert.ok(line.classList.contains("winning-line--row-0"));
+});
+
 Then("cell {int} has the accessibility label {string}", function (number, expected) {
   assert.equal(this.cell(number).getAttribute("aria-label"), expected);
 });
 
-Then("the result dialog says {string}", function (expected) {
-  const dialog = this.dom.window.document.querySelector("#result-dialog");
+async function waitForResultDialog(world) {
+  const dialog = world.dom.window.document.querySelector("#result-dialog");
+  if (!dialog.open) {
+    await new Promise((resolve) => world.dom.window.setTimeout(resolve, 700));
+  }
+  return dialog;
+}
+
+Then("the result dialog says {string}", async function (expected) {
+  const dialog = await waitForResultDialog(this);
   assert.equal(dialog.open, true);
   assert.equal(dialog.querySelector("#result-message").textContent, expected);
 });
 
-Then("the result dialog detail says {string}", function (expected) {
-  const dialog = this.dom.window.document.querySelector("#result-dialog");
+Then("the result dialog detail says {string}", async function (expected) {
+  const dialog = await waitForResultDialog(this);
   assert.equal(dialog.querySelector("#result-detail").textContent, expected);
 });
 
