@@ -12,6 +12,13 @@ describe("dialog layout", () => {
   it("keeps the result dialog centered despite the theme margin reset", () => {
     expect(dialogRule()).toMatch(/(?:^|\n)\s*margin:\s*auto\s*;/);
   });
+
+  it("scales top-layer dialogs with the design canvas", () => {
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*width:\s*720px\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*max-height:\s*none\s*;/);
+    expect(dialogRule()).toMatch(/(?:^|\n)\s*transform:\s*scale\(var\(--page-scale,\s*1\)\)\s*;/);
+    expect(styles).not.toMatch(/\.game dialog\s*\{[^}]*width:\s*min\(720px,\s*calc\(100%\s*-\s*96px\)\)/s);
+  });
 });
 
 describe("screen visibility", () => {
