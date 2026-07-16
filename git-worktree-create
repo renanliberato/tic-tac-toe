@@ -7,6 +7,28 @@
 
 set -u
 
+release_merge_lock() {
+    if [ "${merge_lock_owned-false}" = true ]; then
+        rm -f "$merge_lock"
+        merge_lock_owned=false
+    fi
+}
+
+acquire_merge_lock() {
+    git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+    case "$git_common_dir" in
+        /*) ;;
+        *) git_common_dir="$repo_root/$git_common_dir" ;;
+    esac
+    merge_lock="$git_common_dir/git-worktree-merge.lock"
+    if (set -C; : > "$merge_lock") 2>/dev/null; then
+        merge_lock_owned=true
+        printf '%s\n' "$$" > "$merge_lock"
+        return 0
+    fi
+    return 1
+}
+
 main() {
     if [ "$#" -ne 0 ]; then
         printf '%s\n' 'Usage: ./git-worktree-create' >&2
@@ -27,6 +49,17 @@ main() {
         printf '%s\n' 'git-worktree-create: could not find the main worktree' >&2
         return 1
     fi
+    merge_lock=''
+    if ! acquire_merge_lock; then
+        if [ -n "$merge_lock" ]; then
+            printf 'git-worktree-create: another merge holds %s\n' "$merge_lock" >&2
+        else
+            printf '%s\n' 'git-worktree-create: could not locate the common Git directory' >&2
+        fi
+        return 1
+    fi
+    trap release_merge_lock INT TERM HUP
+
     cd "$main_root" || return 1
 
     # Use a short UUID prefix for both the worktree directory and branch. A
@@ -79,6 +112,8 @@ main() {
 
 main "$@"
 status=$?
+release_merge_lock
+trap - INT TERM HUP
 # `return` succeeds when sourced and leaves the caller in the new worktree.
 # When executed, it fails and the final `exit` returns the creation status.
 return "$status" 2>/dev/null || exit "$status"
