@@ -137,7 +137,7 @@ export function updatePlayerAfterResult(player, game, storage) {
 
   return savePlayer({
     ...player,
-    wins: asCount(player.wins) + (game.winner ? 1 : 0),
+    wins: asCount(player.wins) + (game.winner === "X" ? 1 : 0),
     draws: asCount(player.draws) + (game.draw ? 1 : 0),
     losses: asCount(player.losses) + (game.winner === "O" ? 1 : 0)
   }, storage);

@@ -72,7 +72,7 @@ describe("player data", () => {
 
   it.each([
     [{ winner: "X", draw: false }, { wins: 1, draws: 0, losses: 0 }],
-    [{ winner: "O", draw: false }, { wins: 1, draws: 0, losses: 1 }],
+    [{ winner: "O", draw: false }, { wins: 0, draws: 0, losses: 1 }],
     [{ winner: null, draw: true }, { wins: 0, draws: 1, losses: 0 }]
   ])("records a completed game result", (game, result) => {
     const player = getOrCreatePlayer(storage);

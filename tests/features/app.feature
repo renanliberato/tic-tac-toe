@@ -57,11 +57,42 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 2
     And I click cell 5
     And I click cell 3
-    Then the result dialog says "X Won"
+    Then player statistics include:
+      | games_played | 1 |
+      | moves_played | 5 |
+      | wins         | 1 |
+      | draws        | 0 |
+      | losses       | 0 |
+    And the result dialog says "X Won"
     And player statistics include:
       | games_played | 1 |
       | moves_played | 5 |
       | wins         | 1 |
+      | draws        | 0 |
+      | losses       | 0 |
+      | last_move    | {"cell":2,"mark":"X"} |
+
+
+  Scenario: Results are recorded once for each new game
+    Given I open the tic-tac-toe game
+    When I click the "Start game" button
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    Then the result dialog says "X Won"
+    When I click the "Continue" button
+    And I click the "Start game" button
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    Then player statistics include:
+      | games_played | 2 |
+      | moves_played | 10 |
+      | wins         | 2 |
       | draws        | 0 |
       | losses       | 0 |
       | last_move    | {"cell":2,"mark":"X"} |
@@ -79,7 +110,7 @@ Feature: Playing a game of tic-tac-toe
     And player statistics include:
       | games_played | 1 |
       | moves_played | 6 |
-      | wins         | 1 |
+      | wins         | 0 |
       | draws        | 0 |
       | losses       | 1 |
       | last_move    | {"cell":6,"mark":"O"} |

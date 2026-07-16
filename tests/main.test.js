@@ -89,6 +89,65 @@ describe("game entry point", () => {
     expect(updatedPlayer.last_move).toEqual({ cell: 0, mark: "X" });
   });
 
+  it("records a terminal result before the winning-line animation finishes", async () => {
+    const storage = createStorage();
+    globalThis.localStorage = storage;
+
+    await import("../public/js/main.js?early-result");
+
+    document.querySelector("#start-game").click();
+    vi.advanceTimersByTime(3000);
+    setBoardMetrics();
+
+    for (const index of [0, 3, 1, 4, 2]) {
+      document.querySelector(`[data-cell="${index}"]`).click();
+    }
+
+    expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY))).toMatchObject({
+      games_played: 1,
+      moves_played: 5,
+      wins: 1,
+      draws: 0,
+      losses: 0
+    });
+    expect(document.querySelector("#result-dialog").open).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(700);
+
+    expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY)).wins).toBe(1);
+  });
+
+  it("records a result for each new game after returning home", async () => {
+    const storage = createStorage();
+    globalThis.localStorage = storage;
+
+    await import("../public/js/main.js?result-reset");
+
+    document.querySelector("#start-game").click();
+    vi.advanceTimersByTime(3000);
+    setBoardMetrics();
+    for (const index of [0, 3, 1, 4, 2]) {
+      document.querySelector(`[data-cell="${index}"]`).click();
+    }
+    await vi.advanceTimersByTimeAsync(700);
+    document.querySelector("#continue").click();
+
+    document.querySelector("#start-game").click();
+    vi.advanceTimersByTime(3000);
+    setBoardMetrics();
+    for (const index of [0, 3, 1, 4, 2]) {
+      document.querySelector(`[data-cell="${index}"]`).click();
+    }
+
+    expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY))).toMatchObject({
+      games_played: 2,
+      moves_played: 10,
+      wins: 2,
+      draws: 0,
+      losses: 0
+    });
+  });
+
   it("keeps the home screen visible and board controls disabled initially", async () => {
     await import("../public/js/main.js?unit");
 
