@@ -14,6 +14,18 @@ Feature: Playing a game of tic-tac-toe
     And all board cells are enabled
     And the status says "Player X's turn"
 
+  Scenario: Matchmaking completes before the game board is available
+    Given I open the tic-tac-toe game
+    When I start matchmaking
+    Then the matchmaking dialog is visible
+    And the home screen is hidden
+    And the game board is hidden
+    And all board cells are disabled
+    When matchmaking completes
+    Then the matchmaking dialog is hidden
+    And the game board is visible
+    And all board cells are enabled
+
   Scenario: A new game starts with an empty board
     Given I open the tic-tac-toe game
     When I click the "Start game" button

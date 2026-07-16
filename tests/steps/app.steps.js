@@ -52,17 +52,39 @@ When("I click cell {int}", function (number) {
   this.cell(number).click();
 });
 
-When("I click the {string} button", function (label) {
+When("I start matchmaking", function () {
+  const button = this.dom.window.document.querySelector("#start-game");
+  assert.ok(button, "The Start game button does not exist");
+  button.click();
+});
+
+When("matchmaking completes", async function () {
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
+});
+
+When("I click the {string} button", async function (label) {
   const button = [...this.dom.window.document.querySelectorAll("button")]
     .find((candidate) => candidate.textContent === label);
   assert.ok(button, `A button labelled ${label} does not exist`);
   button.click();
+
+  if (label === "Start game") {
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
+  }
 });
 
 When("I try to dismiss the result dialog", function () {
   const dialog = this.dom.window.document.querySelector("#result-dialog");
   const cancelEvent = new this.dom.window.Event("cancel", { cancelable: true });
   dialog.dispatchEvent(cancelEvent);
+});
+
+Then("the matchmaking dialog is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, true);
+});
+
+Then("the matchmaking dialog is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, false);
 });
 
 Then("the home screen is visible", function () {
