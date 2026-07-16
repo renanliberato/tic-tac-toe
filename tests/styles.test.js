@@ -214,6 +214,15 @@ describe("rendered dialog layout", () => {
 });
 
 
+describe("matchmaking dialog typography", () => {
+  it("uses half-sized text without changing the shared dialog typography", () => {
+    expect(styles).toMatch(/\.game \.matchmaking-dialog\s*\{[^}]*font-size:\s*16px/s);
+    expect(styles).toMatch(/\.game \.matchmaking-dialog h2\s*\{[^}]*font-size:\s*28px/s);
+    expect(styles).toMatch(/\.game dialog\s*\{[^}]*font-size:\s*32px/s);
+    expect(styles).toMatch(/\.game dialog h2\s*\{[^}]*font-size:\s*56px/s);
+  });
+});
+
 describe("screen visibility", () => {
   it("keeps a hidden home screen out of the rendered layout", () => {
     const dom = new JSDOM(`
