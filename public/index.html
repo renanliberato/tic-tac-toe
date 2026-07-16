@@ -34,9 +34,18 @@
             </div>
         </section>
 
-        <dialog id="matchmaking-dialog" aria-labelledby="matchmaking-title" aria-describedby="matchmaking-message">
-            <h2 id="matchmaking-title">Finding an opponent</h2>
-            <p id="matchmaking-message" role="status">Finding an opponent...</p>
+        <dialog id="matchmaking-dialog" class="matchmaking-dialog" aria-labelledby="matchmaking-title" aria-describedby="matchmaking-message">
+            <div class="matchmaking-content">
+                <div class="matchmaking-loader" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <p class="matchmaking-eyebrow">Quick-play queue</p>
+                <h2 id="matchmaking-title">Who’s up for a showdown?</h2>
+                <p id="matchmaking-message" class="matchmaking-message" role="status">Rounding up a worthy challenger...</p>
+                <p class="matchmaking-tip">Warm up your best opening move — the board is almost yours.</p>
+            </div>
         </dialog>
 
         <dialog id="result-dialog" aria-labelledby="result-message">

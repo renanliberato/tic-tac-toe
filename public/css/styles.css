@@ -295,6 +295,82 @@ body {
   75% { transform: translateX(.3rem); }
 }
 
+.game dialog[open] .matchmaking-content {
+  animation: matchmaking-content-in .45s cubic-bezier(.2, .8, .3, 1.1) both;
+}
+
+.game .matchmaking-loader {
+  display: flex;
+  width: 144px;
+  margin: 0 auto 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.game .matchmaking-loader span {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.game dialog[open] .matchmaking-loader span {
+  animation: matchmaking-bounce 1.1s ease-in-out infinite;
+}
+
+.game .matchmaking-loader span:nth-child(2) {
+  animation-delay: .14s;
+}
+
+.game .matchmaking-loader span:nth-child(3) {
+  animation-delay: .28s;
+}
+
+.game .matchmaking-eyebrow {
+  margin: 0 0 12px;
+  color: var(--nc-tx-2, currentColor);
+  font-size: .72em;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.game .matchmaking-message {
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.game .matchmaking-tip {
+  margin: 20px 0 0;
+  color: var(--nc-tx-2, currentColor);
+  font-size: .78em;
+}
+
+@keyframes matchmaking-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(.75rem) scale(.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes matchmaking-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: .55;
+  }
+  30% {
+    transform: translateY(-.55rem) scale(1.12);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .game .cell,
   .game .board {
@@ -306,7 +382,9 @@ body {
   .game .winning-line--active,
   .game .status--updated,
   .game .board--winner,
-  .game .board--draw {
+  .game .board--draw,
+  .game dialog[open] .matchmaking-content,
+  .game dialog[open] .matchmaking-loader span {
     animation: none;
   }
 
