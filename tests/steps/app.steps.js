@@ -197,6 +197,22 @@ Then("the board contains {string} in cells {int}, {int}, and {int}", function (m
   }
 });
 
+Then("the board renders X and O as SVG icons", function () {
+  const xIcon = this.cell(1).querySelector("svg");
+  const oIcon = this.cell(4).querySelector("svg");
+
+  assert.ok(xIcon, "The X mark is not rendered as an SVG icon");
+  assert.ok(oIcon, "The O mark is not rendered as an SVG icon");
+  assert.equal(xIcon.namespaceURI, "http://www.w3.org/2000/svg");
+  assert.equal(oIcon.namespaceURI, "http://www.w3.org/2000/svg");
+  assert.equal(xIcon.classList.contains("mark-icon--x"), true);
+  assert.equal(oIcon.classList.contains("mark-icon--o"), true);
+  assert.equal(xIcon.querySelector("path").getAttribute("d"), "M24 24 76 76M76 24 24 76");
+  assert.equal(oIcon.querySelector("circle").getAttribute("r"), "29");
+  assert.equal(xIcon.querySelector("title").textContent, "X");
+  assert.equal(oIcon.querySelector("title").textContent, "O");
+});
+
 Then("the winning cells are highlighted", function () {
   assert.deepEqual(
     this.cells().filter((cell) => cell.classList.contains("cell--winner")).map((cell) => cell.dataset.cell),

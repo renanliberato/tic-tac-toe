@@ -1,6 +1,7 @@
 import { applyPageScale } from "./layout.js";
 
 const WINNING_LINE_DURATION = 700;
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
 const WINNING_LINE_CLASSES = {
   "0,1,2": "winning-line--row-0",
@@ -80,7 +81,7 @@ export class GameView {
     this.renderPlayers(player, opponent, state, gameStarted);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
-      cell.textContent = mark;
+      cell.replaceChildren(mark ? this.createMarkIcon(mark) : "");
       cell.dataset.mark = mark;
       cell.classList.toggle("cell--placed", Boolean(mark));
       cell.classList.toggle("cell--winner", winningLine.includes(index));
@@ -109,6 +110,34 @@ export class GameView {
       this.winningLineElement.hidden = !state.winner;
       if (state.winner) this.setWinningLine(this.winningLineElement, winningLine);
     }
+  }
+
+  createMarkIcon(mark) {
+    const icon = this.document.createElementNS(SVG_NAMESPACE, "svg");
+    icon.classList.add("mark-icon", `mark-icon--${mark.toLowerCase()}`);
+    icon.setAttribute("viewBox", "0 0 100 100");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+
+    const title = this.document.createElementNS(SVG_NAMESPACE, "title");
+    title.textContent = mark;
+    icon.append(title);
+
+    if (mark === "X") {
+      const strokes = this.document.createElementNS(SVG_NAMESPACE, "path");
+      strokes.classList.add("mark-icon__stroke");
+      strokes.setAttribute("d", "M24 24 76 76M76 24 24 76");
+      icon.append(strokes);
+    } else if (mark === "O") {
+      const ring = this.document.createElementNS(SVG_NAMESPACE, "circle");
+      ring.classList.add("mark-icon__stroke");
+      ring.setAttribute("cx", "50");
+      ring.setAttribute("cy", "50");
+      ring.setAttribute("r", "29");
+      icon.append(ring);
+    }
+
+    return icon;
   }
 
   renderPlayers(player, opponent, state, gameStarted) {
