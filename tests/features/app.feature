@@ -11,6 +11,7 @@ Feature: Playing a game of tic-tac-toe
     When I click the "Start game" button
     Then the home screen is hidden
     And the game board is visible
+    And the first board cell has focus
     And all board cells are enabled
     And the local player card indicates the active turn
     And the turn announcement says "Player X's turn"

@@ -85,9 +85,10 @@ export class GameController {
     // actual game covered even when matchmaking was skipped.
     this.opponent ||= createOpponent();
     this.player = startPlayerGame(this.player);
-    this.model.reset();
     this.view.showGame();
+    this.model.reset();
     this.render();
+    this.view.focusFirstCell();
   }
 
   showHome() {

@@ -14,6 +14,8 @@ class FakeView {
     this.actions = [];
     this.winningLines = [];
     this.resultStates = [];
+    this.events = [];
+    this.gameVisible = false;
   }
 
   onStart(handler) {
@@ -31,12 +33,14 @@ class FakeView {
   bindDialogGuards() {}
 
   render(state, gameStarted, winningLine, player, opponent) {
-    this.rendered.push({ state, gameStarted, winningLine, player, opponent });
+    this.events.push("render");
+    this.rendered.push({ state, gameStarted, winningLine, player, opponent, gameVisible: this.gameVisible });
   }
 
-  showMatchmaking() { this.actions.push("showMatchmaking"); }
-  showGame() { this.actions.push("showGame"); }
-  showHome() { this.actions.push("showHome"); }
+  showMatchmaking() { this.gameVisible = false; this.actions.push("showMatchmaking"); }
+  showGame() { this.gameVisible = true; this.actions.push("showGame"); this.events.push("showGame"); }
+  focusFirstCell() { this.events.push("focusFirstCell"); }
+  showHome() { this.gameVisible = false; this.actions.push("showHome"); }
   closeResultDialog() { this.actions.push("closeResultDialog"); }
   openMatchmakingDialog() { this.actions.push("openMatchmakingDialog"); }
   closeMatchmakingDialog() { this.actions.push("closeMatchmakingDialog"); }
@@ -93,6 +97,28 @@ describe("MVC game architecture", () => {
     unsubscribe();
     model.reset();
     expect(states).toHaveLength(2);
+  });
+
+  it("exposes the game screen before rendering the initial turn announcement", () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    let matchmakingCallback;
+    const timer = {
+      setTimeout(callback) {
+        matchmakingCallback = callback;
+        return 1;
+      },
+      clearTimeout() {}
+    };
+
+    new GameController(model, view, timer);
+    view.startHandler();
+    matchmakingCallback();
+
+    const gameRenders = view.rendered.filter(({ gameStarted }) => gameStarted);
+    expect(gameRenders.length).toBeGreaterThan(0);
+    expect(gameRenders[0].gameVisible).toBe(true);
+    expect(view.events.slice(-4)).toEqual(["showGame", "render", "render", "focusFirstCell"]);
   });
 
   it("coordinates matchmaking, moves, and a winning result without a DOM", async () => {
@@ -207,6 +233,15 @@ describe("MVC game architecture", () => {
     view.render({ board: ["X", "O", "X", "X", "O", "O", "O", "X", "X"], player: "O", winner: null, draw: true }, true, [],
       { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
     expect(turnAnnouncement.textContent).toBe("It's a draw!");
+  });
+
+  it("focuses the first cell when requested by the controller", () => {
+    const dom = createViewDocument();
+    const view = new GameView(dom.window.document);
+
+    view.focusFirstCell();
+
+    expect(dom.window.document.activeElement).toBe(view.cells[0]);
   });
 
   it("uses player-card borders to indicate the active turn", () => {

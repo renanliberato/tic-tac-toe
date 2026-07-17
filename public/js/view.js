@@ -263,6 +263,9 @@ export class GameView {
   showGame() {
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = false;
+  }
+
+  focusFirstCell() {
     this.cells[0]?.focus();
   }
 

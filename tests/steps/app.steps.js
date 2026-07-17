@@ -145,6 +145,10 @@ Then("the opponent card shows a friendly name", function () {
   assert.match(name, /^[A-Za-z]+$/);
 });
 
+Then("the first board cell has focus", function () {
+  assert.equal(this.dom.window.document.activeElement, this.cell(1));
+});
+
 Then("all board cells are enabled", function () {
   assert.ok(this.cells().every((cell) => !cell.disabled));
 });
