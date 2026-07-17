@@ -1,0 +1,206 @@
+#!/bin/sh
+# Turn a rough task into a fully specified task through fresh grilling agents.
+
+set -eu
+# Preserve the user's input while agents are deliberately disconnected from it.
+exec 3<&0
+
+fail() {
+    printf '%s\n' "refine: $*" >&2
+    exit 1
+}
+
+[ "$#" -gt 0 ] || fail 'usage: ./refine PROMPT'
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 'not inside a Git work tree'
+cd "$repo_root" || exit 1
+
+skill_file=./.agents/skills/batch-grill-me/SKILL.md
+[ -r "$skill_file" ] || fail "$skill_file is required and must be readable"
+command -v mswea >/dev/null 2>&1 || fail 'mswea is required'
+command -v python3 >/dev/null 2>&1 || fail 'python3 is required'
+
+original_task=$*
+model=${REFINE_MODEL:-${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}}
+max_rounds=${REFINE_MAX_ROUNDS:-50}
+case $max_rounds in
+    ''|*[!0-9]*|0) fail 'REFINE_MAX_ROUNDS must be a positive integer' ;;
+esac
+
+mkdir -p tasks
+session_dir=$(mktemp -d "${TMPDIR:-/tmp}/refine.XXXXXX") || fail 'could not create session directory'
+cleanup() {
+    rm -rf "$session_dir"
+    if [ "${completed-false}" != true ] && [ -n "${task_file-}" ]; then
+        rm -f "$task_file"
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+history_file=$session_dir/history.json
+response_file=$session_dir/response.json
+ui_script=$session_dir/ask-questions.py
+cat > "$ui_script" <<'PY'
+import json, os, sys
+response_path, history_path, round_number = sys.argv[1:]
+with open(response_path, encoding="utf-8") as stream:
+    response = json.load(stream)
+def read_answer(prompt):
+    print(prompt, end="", flush=True)
+    value = bytearray()
+    while True:
+        byte = os.read(0, 1)
+        if not byte:
+            raise EOFError
+        if byte == b"\n":
+            return value.decode("utf-8").removesuffix("\r")
+        value.extend(byte)
+
+answers = []
+questions = response["questions"]
+total = len(questions)
+print(f"\n=== Refinement round {round_number}: {total} question(s) ===")
+for index, item in enumerate(questions, 1):
+    print(f"\n[{index}/{total}] {item['question']}")
+    print(f"Recommendation: {item['recommendation']}")
+    try:
+        answer = read_answer("Your answer: ")
+    except EOFError:
+        print("\nrefine: input ended before all questions were answered", file=sys.stderr)
+        raise SystemExit(3)
+    answers.append({
+        "question": item["question"],
+        "recommendation": item["recommendation"],
+        "answer": answer,
+    })
+with open(history_path, encoding="utf-8") as stream:
+    history = json.load(stream)
+history["rounds"].append({"round": int(round_number), "answers": answers})
+temporary = history_path + ".tmp"
+with open(temporary, "w", encoding="utf-8") as stream:
+    json.dump(history, stream, indent=2, ensure_ascii=False)
+    stream.write("\n")
+os.replace(temporary, history_path)
+PY
+python3 - "$history_file" "$original_task" <<'PY'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as stream:
+    json.dump({"original_task": sys.argv[2], "rounds": []}, stream, indent=2, ensure_ascii=False)
+    stream.write("\n")
+PY
+
+task_file=$(python3 - "$repo_root/tasks" <<'PY'
+from pathlib import Path
+import sys, uuid
+folder = Path(sys.argv[1])
+while True:
+    candidate = folder / f"{uuid.uuid4().hex[:6]}-todo.md"
+    if not candidate.exists():
+        print(candidate.resolve())
+        break
+PY
+)
+
+skill=$(cat "$skill_file")
+round=1
+while [ "$round" -le "$max_rounds" ]; do
+    rm -f "$response_file"
+    history=$(cat "$history_file")
+    prompt=$(cat <<EOF
+You are the task-refinement interviewer. The user's rough task is:
+
+<rough-task>
+$original_task
+</rough-task>
+
+Follow this skill exactly:
+
+<skill>
+$skill
+</skill>
+
+This is fresh agent session $round. The complete machine-readable interview history is at:
+$history_file
+The same complete history is embedded here so this new agent explicitly receives every prior answer:
+<history>
+$history
+</history>
+Read the history before deciding what remains unsettled. Inspect the repository yourself for facts; ask the user only for decisions.
+
+Do not implement the task and do not modify repository files, except for the final task file named below. Communicate with the refine CLI by creating exactly this JSON file:
+$response_file
+
+To ask the current frontier, write valid UTF-8 JSON in this exact shape:
+{
+  "status": "ASK_QUESTIONS",
+  "questions": [
+    {"question": "A concrete decision question", "recommendation": "Your recommended answer and brief reason"}
+  ]
+}
+Include every currently unblocked frontier question, with at least one question. Do not put questions only in your chat response. The CLI will display them one at a time and a new agent session will receive the answers.
+
+Final user confirmation required by the skill is mandatory. Treat confirmation of shared understanding as the last decision question; do not finish unless the history contains an explicit user answer confirming it. When and only when no design-tree frontier remains and that confirmation is present, create this exact file:
+$task_file
+Write a self-contained, implementation-ready Markdown task preserving the user's intent, settled decisions, relevant discovered facts, scope, constraints, and acceptance criteria. Then write this protocol JSON:
+{"status": "REFINE_FINISHED", "task_file": "$task_file"}
+REFINE_FINISHED is the required completion keyword. Never claim completion without creating a non-empty task file. Do not create any other files.
+EOF
+)
+
+    printf '%s\n' "refine: consulting agent (round $round)..."
+    if ! mswea "$model" --yolo --exit-immediately -t "$prompt" </dev/null 3<&-; then
+        fail "agent failed in round $round"
+    fi
+    [ -s "$response_file" ] || fail "agent did not create its response file in round $round"
+
+    status=$(python3 - "$response_file" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        data = json.load(stream)
+    status = data.get("status")
+    if status not in ("ASK_QUESTIONS", "REFINE_FINISHED"):
+        raise ValueError("status must be ASK_QUESTIONS or REFINE_FINISHED")
+    if status == "ASK_QUESTIONS":
+        questions = data.get("questions")
+        if not isinstance(questions, list) or not questions:
+            raise ValueError("ASK_QUESTIONS requires a non-empty questions array")
+        for number, item in enumerate(questions, 1):
+            if not isinstance(item, dict) or not isinstance(item.get("question"), str) or not item["question"].strip():
+                raise ValueError(f"question {number} is missing question text")
+            if not isinstance(item.get("recommendation"), str) or not item["recommendation"].strip():
+                raise ValueError(f"question {number} is missing a recommendation")
+    print(status)
+except Exception as error:
+    print(f"refine: invalid agent response: {error}", file=sys.stderr)
+    raise SystemExit(2)
+PY
+) || exit $?
+
+    if [ "$status" = REFINE_FINISHED ]; then
+        reported_task=$(python3 - "$response_file" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    print(json.load(stream).get("task_file", ""))
+PY
+)
+        [ "$reported_task" = "$task_file" ] || fail 'agent reported an unexpected task file'
+        [ -s "$task_file" ] || fail 'agent finished without creating a non-empty task file'
+        relative_task=${task_file#"$repo_root"/}
+        completed=true
+        printf '\n%s\n' "Refinement finished: ./$relative_task"
+        exit 0
+    fi
+
+    if ! python3 "$ui_script" "$response_file" "$history_file" "$round" <&3
+    then
+        fail 'interview cancelled'
+    fi
+
+    round=$((round + 1))
+done
+
+fail "agent did not finish after $max_rounds rounds"
