@@ -31,8 +31,9 @@ fi
 
 # These are separate agent sessions and separate roles.  They may be
 # overridden when a deployment has dedicated reviewer/fixer agent names.
-review_agent=${CODE_REVIEW_REVIEW_AGENT:-codex:gpt-5.6-luna@high}
-fix_agent=${CODE_REVIEW_FIX_AGENT:-codex:gpt-5.6-luna@high}
+default_agent=${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}
+review_agent=${CODE_REVIEW_REVIEW_AGENT:-$default_agent}
+fix_agent=${CODE_REVIEW_FIX_AGENT:-$default_agent}
 review_file=REVIEW_OUTPUT.md
 
 review_prompt=$(cat <<'TASK'

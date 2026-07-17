@@ -161,7 +161,7 @@ TASK
             trap - INT TERM HUP EXIT
             return 1
         fi
-        mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$prompt" </dev/null
+        mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt" </dev/null
         status=$?
         if [ "$status" -eq 0 ]; then
             merge_head=$(git rev-parse --git-path MERGE_HEAD)
