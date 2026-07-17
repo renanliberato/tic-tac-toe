@@ -142,6 +142,8 @@ Feature: Playing a game of tic-tac-toe
     When I click the "Continue" button
     And I open the weekly leaderboard
     Then the leaderboard shows the local player with score 1
+    When another browser tab changes the leaderboard score to 4
+    Then the leaderboard shows the local player with score 4
     When I return from the weekly leaderboard
     And I click the "Start game" button
     Then the X player score is 0

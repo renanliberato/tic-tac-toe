@@ -283,20 +283,6 @@ export class GameView {
     }
     this.winningAnimationCleanup?.();
     this.winningAnimationCleanup = null;
-    this.leaderboardRefreshHandler = null;
-    this.leaderboardInterval = null;
-    this.leaderboardObserver = null;
-    this.leaderboardOpen = false;
-    this.currentLeaderboardPlayer = null;
-    this.handleLeaderboardScroll = () => this.updateFloatingLocalRow();
-    this.handleVisibilityChange = () => {
-      if (this.document.visibilityState === "visible") this.refreshLeaderboard();
-    };
-    this.handleStorageChange = (event) => {
-      if (event.key === PLAYER_STORAGE_KEY) this.refreshLeaderboard(true);
-    };
-    this.handleFloatingActivation = () => this.jumpToLocalRow();
-
 
     if (this.winningLineElement) {
       this.winningLineElement.classList.remove("winning-line--active");
@@ -324,20 +310,6 @@ export class GameView {
         }
         winningAnimationElement.removeEventListener("animationend", finish);
         this.winningAnimationCleanup = null;
-    this.leaderboardRefreshHandler = null;
-    this.leaderboardInterval = null;
-    this.leaderboardObserver = null;
-    this.leaderboardOpen = false;
-    this.currentLeaderboardPlayer = null;
-    this.handleLeaderboardScroll = () => this.updateFloatingLocalRow();
-    this.handleVisibilityChange = () => {
-      if (this.document.visibilityState === "visible") this.refreshLeaderboard();
-    };
-    this.handleStorageChange = (event) => {
-      if (event.key === PLAYER_STORAGE_KEY) this.refreshLeaderboard(true);
-    };
-    this.handleFloatingActivation = () => this.jumpToLocalRow();
-
         resolve();
       };
 

@@ -92,6 +92,63 @@ describe("leaderboard view and navigation", () => {
     view.stopLeaderboard();
   });
 
+  it("preserves leaderboard refresh and listener identities after game feedback", async () => {
+    const dom = createDom();
+    let now = LEADERBOARD_EPOCH + 1;
+    const view = new GameView(dom.window.document, () => now);
+    const originalListeners = {
+      scroll: view.handleLeaderboardScroll,
+      visibility: view.handleVisibilityChange,
+      storage: view.handleStorageChange,
+      floating: view.handleFloatingActivation
+    };
+    const listRemoveSpy = vi.spyOn(view.leaderboardList, "removeEventListener");
+    const floatingRemoveSpy = vi.spyOn(view.floatingLocalRow, "removeEventListener");
+    const documentRemoveSpy = vi.spyOn(dom.window.document, "removeEventListener");
+    const windowRemoveSpy = vi.spyOn(dom.window, "removeEventListener");
+    const setIntervalSpy = vi.spyOn(dom.window, "setInterval");
+    const storagePlayer = { ...player, leaderboard_score: 7 };
+    const nextCyclePlayer = { ...player, leaderboard_cycle: 1, leaderboard_score: 0 };
+    const refresh = vi.fn()
+      .mockReturnValueOnce(storagePlayer)
+      .mockReturnValueOnce(nextCyclePlayer);
+    view.onLeaderboardRefresh(refresh);
+
+    view.resetFeedback();
+    const animation = view.animateWinningLine([0, 1, 2]);
+    view.winningLineElement.dispatchEvent(new dom.window.Event("animationend"));
+    await animation;
+
+    expect(view.handleLeaderboardScroll).toBe(originalListeners.scroll);
+    expect(view.handleVisibilityChange).toBe(originalListeners.visibility);
+    expect(view.handleStorageChange).toBe(originalListeners.storage);
+    expect(view.handleFloatingActivation).toBe(originalListeners.floating);
+
+    view.showLeaderboard(player, now);
+    dom.window.dispatchEvent(new dom.window.StorageEvent("storage", {
+      key: "tic-tac-toe-player"
+    }));
+    expect(refresh).toHaveBeenLastCalledWith(true);
+    expect(dom.window.document.querySelector(
+      "#leaderboard-local-row .leaderboard-row__score"
+    ).textContent).toBe("7");
+
+    now = LEADERBOARD_EPOCH + 7 * 86_400_000 + 1;
+    setIntervalSpy.mock.calls[0][0]();
+    expect(refresh).toHaveBeenLastCalledWith(false);
+    expect(dom.window.document.querySelector(
+      "#leaderboard-local-row .leaderboard-row__score"
+    ).textContent).toBe("0");
+
+    view.stopLeaderboard();
+    expect(listRemoveSpy).toHaveBeenCalledWith("scroll", originalListeners.scroll);
+    expect(floatingRemoveSpy).toHaveBeenCalledWith("click", originalListeners.floating);
+    expect(documentRemoveSpy).toHaveBeenCalledWith(
+      "visibilitychange", originalListeners.visibility
+    );
+    expect(windowRemoveSpy).toHaveBeenCalledWith("storage", originalListeners.storage);
+  });
+
   it("navigates Home to Leaderboard to Home without URL changes and restores trophy focus", () => {
     const dom = createDom();
     globalThis.localStorage = dom.window.localStorage;
