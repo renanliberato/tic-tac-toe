@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
-import { cwd } from "node:process";
+import { cwd, env } from "node:process";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -56,5 +56,24 @@ describe("git merge lock", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("git-sync: git pull --rebase failed without leaving a conflict to resolve");
     expect(result.stderr).not.toContain("another merge holds");
+  });
+
+  it("fails clearly instead of waiting forever on a stale merge lock", () => {
+    const repository = createRepository();
+    const sync = path.join(repository, "git-sync");
+    writeFileSync(sync, readFileSync(path.join(repositoryRoot, "git-sync"), "utf8"));
+    chmodSync(sync, 0o755);
+    const lock = mergeLockPath(repository);
+    writeFileSync(lock, "abandoned process\n");
+
+    const result = spawnSync("./git-sync", {
+      cwd: repository,
+      encoding: "utf8",
+      env: { ...env, GIT_WORKTREE_MERGE_LOCK_TIMEOUT: "1" }
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("git-sync: timed out after 1 seconds waiting for merge lock");
+    expect(readFileSync(lock, "utf8")).toBe("abandoned process\n");
   });
 });
