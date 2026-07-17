@@ -28,7 +28,10 @@ function createCoinDocument() {
         <div class="home-preview"></div>
         <button id="start-game" type="button"></button>
       </section>
-      <section id="game-screen" hidden></section>
+      <section id="game-screen" hidden>
+        <p id="status"></p>
+        <div class="board"></div>
+      </section>
     </main>
   `, { pretendToBeVisual: true });
 }
@@ -99,6 +102,41 @@ describe("coin display and celebration", () => {
   it.each([[0, "0000"], [10, "0010"], [9999, "9999"], [10000, "9999"], [-1, "0000"]])(
     "formats %s as %s", (value, expected) => expect(formatCoinBalance(value)).toBe(expected)
   );
+
+  it("replays persisted coins on initial load and consumes them for a fresh instance", () => {
+    const store = storage();
+    store.setItem(PLAYER_STORAGE_KEY, JSON.stringify({
+      player_id: "123e4567-e89b-42d3-a456-426614174000",
+      coin_balance: 42,
+      pending_coins: 3
+    }));
+    globalThis.localStorage = store;
+
+    dom = createCoinDocument();
+    new GameController(new GameModel(), new GameView(dom.window.document));
+
+    expect(dom.window.document.querySelector("#coin-amount").textContent).toBe("0039");
+    expect(dom.window.document.querySelectorAll("[data-flying-coin]")).toHaveLength(3);
+    expect(dom.window.document.querySelector("#coin-announcement").textContent).toBe("");
+
+    vi.advanceTimersByTime(1400);
+
+    expect(JSON.parse(store.getItem(PLAYER_STORAGE_KEY))).toMatchObject({
+      coin_balance: 42,
+      pending_coins: 0
+    });
+    expect(dom.window.document.querySelector("#coin-amount").textContent).toBe("0042");
+    expect(dom.window.document.querySelector("#coin-announcement").textContent)
+      .toBe("3 coins earned; balance 42");
+
+    dom.window.close();
+    dom = createCoinDocument();
+    new GameController(new GameModel(), new GameView(dom.window.document));
+
+    expect(dom.window.document.querySelector("#coin-amount").textContent).toBe("0042");
+    expect(dom.window.document.querySelectorAll("[data-flying-coin]")).toHaveLength(0);
+    expect(dom.window.document.querySelector("#coin-announcement").textContent).toBe("");
+  });
 
   it("presents a backlog with at most 20 icons and one completion announcement", () => {
     dom = createCoinDocument();
