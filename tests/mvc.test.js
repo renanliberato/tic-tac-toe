@@ -216,6 +216,28 @@ describe("MVC game architecture", () => {
     expect([...view.cells].map((cell) => cell.textContent)).toEqual([
       "X", "X", "X", "O", "", "", "", "", ""
     ]);
+
+    const xIcon = view.cells[0].querySelector("svg");
+    expect(xIcon.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(xIcon.classList.contains("mark-icon")).toBe(true);
+    expect(xIcon.classList.contains("mark-icon--x")).toBe(true);
+    expect(xIcon.getAttribute("viewBox")).toBe("0 0 100 100");
+    expect(xIcon.getAttribute("aria-hidden")).toBe("true");
+    expect(xIcon.getAttribute("focusable")).toBe("false");
+    expect(xIcon.querySelector("title").textContent).toBe("X");
+    expect(xIcon.querySelector("path").getAttribute("d")).toBe("M24 24 76 76M76 24 24 76");
+    expect(xIcon.querySelector("path").classList.contains("mark-icon__stroke")).toBe(true);
+
+    const oIcon = view.cells[3].querySelector("svg");
+    expect(oIcon.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(oIcon.classList.contains("mark-icon--o")).toBe(true);
+    expect(oIcon.querySelector("title").textContent).toBe("O");
+    expect(oIcon.querySelector("circle").getAttribute("cx")).toBe("50");
+    expect(oIcon.querySelector("circle").getAttribute("cy")).toBe("50");
+    expect(oIcon.querySelector("circle").getAttribute("r")).toBe("29");
+    expect(oIcon.querySelector("circle").classList.contains("mark-icon__stroke")).toBe(true);
+    expect(view.cells[4].querySelector("svg")).toBeNull();
+
     expect(view.cells.slice(0, 3).every((cell) => cell.classList.contains("cell--winner"))).toBe(true);
     expect(view.cells[0].disabled).toBe(true);
     expect(view.cells[4].disabled).toBe(true);
