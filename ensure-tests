@@ -64,7 +64,7 @@ TASK
 # The agent is intentionally detached from the pipeline's stdin. The barrier
 # above provides synchronization without allowing the agent to consume the
 # preceding command's output.
-if ! mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$coverage_prompt" </dev/null; then
+if ! mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$coverage_prompt" </dev/null; then
     printf '%s\n' 'ensure-tests: coverage agent failed' >&2
     exit 1
 fi
@@ -134,7 +134,7 @@ while :; do
         printf '%s\n' '--- end check output ---'
     )
 
-    if ! mswea codex:gpt-5.6-luna@high --yolo --exit-immediately -t "$fix_prompt" </dev/null; then
+    if ! mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$fix_prompt" </dev/null; then
         printf '%s\n' 'ensure-tests: test/lint fixing agent failed' >&2
         exit 1
     fi
