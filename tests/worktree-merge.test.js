@@ -39,6 +39,10 @@ function worktreeCount(directory) {
   return runGit(directory, "worktree", "list", "--porcelain").match(/^worktree /gm)?.length ?? 0;
 }
 
+function mergeLockPath(directory) {
+  return path.resolve(directory, runGit(directory, "rev-parse", "--git-common-dir").trim(), "git-worktree-merge.lock");
+}
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -65,5 +69,41 @@ describe("git-worktree-merge", () => {
     expect(worktreeCount(repository)).toBe(1);
     expect(() => runGit(repository, "show-ref", "--verify", "refs/heads/abc123")).toThrow();
     expect(readFileSync(path.join(repository, "README"), "utf8")).toBe("base\nchange\n");
-  }, 15000);
+  });
+
+  it("waits for the merge lock after synchronization", () => {
+    const repository = createRepository();
+    const worktreeParent = path.join(repository, ".worktrees");
+    const worktree = path.join(worktreeParent, "abc123");
+    mkdirSync(worktreeParent);
+    runGit(repository, "worktree", "add", "--quiet", "-b", "abc123", worktree);
+    writeFileSync(path.join(worktree, "README"), "base
+change
+");
+    runGit(worktree, "add", "README");
+    runGit(worktree, "commit", "--quiet", "-m", "change");
+    runGit(worktree, "push", "--quiet", "--set-upstream", "origin", "abc123");
+
+    // Make synchronization a no-op so the lock is deliberately contended at
+    // git-worktree-merge's own acquisition point.
+    writeFileSync(path.join(repository, "git-sync"), "#!/bin/sh
+exit 0
+");
+    chmodSync(path.join(repository, "git-sync"), 0o755);
+    const lock = mergeLockPath(repository);
+    writeFileSync(lock, "merge in progress
+");
+
+    const result = spawnSync("sh", [
+      "-c",
+      "(sleep 0.2; rm -f -- \"$1\") & exec ./git-worktree-merge",
+      "worktree-merge-test",
+      lock
+    ], { cwd: worktree, encoding: "utf8" });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("another merge holds");
+    expect(existsSync(worktree)).toBe(false);
+    expect(worktreeCount(repository)).toBe(1);
+  });
 });
