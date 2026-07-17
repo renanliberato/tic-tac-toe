@@ -2,6 +2,15 @@ import { applyPageScale } from "./layout.js";
 
 const WINNING_LINE_DURATION = 700;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+const COIN_TRAVEL_DURATION = 1100;
+const COIN_TOTAL_DURATION = 1400;
+const COIN_SIZE = 58;
+const MAX_FLYING_COINS = 20;
+
+export function formatCoinBalance(balance) {
+  const value = Number.isInteger(balance) && balance >= 0 ? balance : 0;
+  return String(Math.min(value, 9999)).padStart(4, "0");
+}
 
 const WINNING_LINE_CLASSES = {
   "0,1,2": "winning-line--row-0",
@@ -25,6 +34,11 @@ export class GameView {
     this.homeScreen = documentRef.querySelector("#home-screen");
     this.gameScreen = documentRef.querySelector("#game-screen");
     this.start = documentRef.querySelector("#start-game");
+    this.coinHolder = documentRef.querySelector("#coin-holder");
+    this.coinAmount = documentRef.querySelector("#coin-amount");
+    this.coinAnnouncement = documentRef.querySelector("#coin-announcement");
+    this.coinPresentation = null;
+    this.coinPresentationId = 0;
     this.cells = [...documentRef.querySelectorAll("[data-cell]")];
     this.board = documentRef.querySelector(".board");
     this.status = documentRef.querySelector("#status");
@@ -80,6 +94,7 @@ export class GameView {
   }
 
   render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null) {
+    if (!this.coinPresentation) this.renderCoinBalance(player?.coin_balance ?? 0);
     this.renderPlayers(player, opponent, state, gameStarted, matchScore);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
@@ -109,6 +124,151 @@ export class GameView {
     if (this.winningLineElement) {
       this.winningLineElement.hidden = !state.winner;
       if (state.winner) this.setWinningLine(this.winningLineElement, winningLine);
+    }
+  }
+
+  renderCoinBalance(balance) {
+    const value = Number.isInteger(balance) && balance >= 0 ? balance : 0;
+    if (this.coinAmount) this.coinAmount.textContent = formatCoinBalance(value);
+    if (this.coinHolder) this.coinHolder.setAttribute("aria-label", `Coin balance: ${value}`);
+  }
+
+  isReducedMotion() {
+    try {
+      return Boolean(this.document.defaultView?.matchMedia?.(
+        "(prefers-reduced-motion: reduce)"
+      ).matches);
+    } catch {
+      return false;
+    }
+  }
+
+  enterHome(player, onConsumed) {
+    this.finishCoinPresentation();
+
+    const balance = Number.isInteger(player?.coin_balance) && player.coin_balance >= 0
+      ? player.coin_balance
+      : 0;
+    const pending = Number.isInteger(player?.pending_coins) && player.pending_coins >= 0
+      ? player.pending_coins
+      : 0;
+    if (!this.coinHolder || !pending) {
+      this.renderCoinBalance(balance);
+      return;
+    }
+
+    const initialBalance = Math.max(0, balance - pending);
+    const session = {
+      id: ++this.coinPresentationId,
+      balance,
+      pending,
+      presented: initialBalance,
+      finalized: false,
+      timers: [],
+      elements: [],
+      onConsumed
+    };
+    this.coinPresentation = session;
+    this.renderCoinBalance(initialBalance);
+
+    if (this.isReducedMotion()) {
+      this.finishCoinPresentation();
+      return;
+    }
+
+    const iconCount = Math.min(pending, MAX_FLYING_COINS);
+    const stagger = iconCount > 1
+      ? Math.min(150, (COIN_TOTAL_DURATION - COIN_TRAVEL_DURATION) / (iconCount - 1))
+      : 0;
+    const homeRect = this.homeScreen?.getBoundingClientRect?.() || { left: 0, top: 0 };
+    const source = this.getCoinPoint(this.homeScreen?.querySelector(".home-preview"), homeRect, .5, .62);
+    const target = this.getCoinPoint(this.coinHolder, homeRect, .5, .5);
+    const lastArrival = iconCount - 1;
+
+    for (let index = 0; index < iconCount; index += 1) {
+      const coin = this.document.createElement("span");
+      const travel = this.document.createElement("span");
+      const face = this.document.createElement("span");
+      coin.className = "flying-coin";
+      travel.className = "flying-coin__travel";
+      face.className = "flying-coin__face";
+      coin.dataset.coinIndex = String(index);
+      coin.dataset.flyingCoin = "";
+      coin.setAttribute("aria-hidden", "true");
+      coin.setAttribute("role", "presentation");
+      travel.setAttribute("aria-hidden", "true");
+      face.setAttribute("aria-hidden", "true");
+      // Points represent centers; absolute positioning starts at the element
+      // corner, so offset by half the rendered coin size for a centered flight.
+      coin.style.left = `${source.x - COIN_SIZE / 2}px`;
+      coin.style.top = `${source.y - COIN_SIZE / 2}px`;
+      coin.style.setProperty("--coin-dx", `${target.x - source.x}px`);
+      coin.style.setProperty("--coin-dy", `${target.y - source.y}px`);
+      coin.style.setProperty("--coin-delay", `${index * stagger}ms`);
+      coin.style.setProperty("--coin-duration", `${COIN_TRAVEL_DURATION}ms`);
+      face.append(this.createCoinIcon());
+      travel.append(face);
+      coin.append(travel);
+      this.homeScreen?.append(coin);
+      session.elements.push(coin);
+
+      const increment = pending > MAX_FLYING_COINS && index === lastArrival
+        ? pending - (MAX_FLYING_COINS - 1)
+        : 1;
+      const timer = globalThis.setTimeout(() => {
+        if (!this.isCurrentCoinPresentation(session)) return;
+        session.presented = Math.min(balance, session.presented + increment);
+        this.renderCoinBalance(session.presented);
+        if (index === lastArrival) this.finishCoinPresentation(session);
+      }, COIN_TRAVEL_DURATION + index * stagger);
+      session.timers.push(timer);
+    }
+  }
+
+  getCoinPoint(element, containerRect, fallbackX, fallbackY) {
+    const rect = element?.getBoundingClientRect?.();
+    if (!rect || !rect.width && !rect.height) {
+      return {
+        x: containerRect.width ? containerRect.width * fallbackX : 0,
+        y: containerRect.height ? containerRect.height * fallbackY : 0
+      };
+    }
+    const layoutWidth = this.homeScreen?.offsetWidth || containerRect.width || 1;
+    const layoutHeight = this.homeScreen?.offsetHeight || containerRect.height || 1;
+    const scaleX = containerRect.width ? containerRect.width / layoutWidth : 1;
+    const scaleY = containerRect.height ? containerRect.height / layoutHeight : 1;
+    return {
+      x: (rect.left - containerRect.left + rect.width / 2) / scaleX,
+      y: (rect.top - containerRect.top + rect.height / 2) / scaleY
+    };
+  }
+
+  createCoinIcon() {
+    const icon = this.document.createElement("span");
+    icon.className = "coin-art";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "¢";
+    return icon;
+  }
+
+  isCurrentCoinPresentation(session) {
+    return this.coinPresentation === session
+      && session.id === this.coinPresentationId
+      && !session.finalized;
+  }
+
+  finishCoinPresentation(session = this.coinPresentation) {
+    if (!session || !this.isCurrentCoinPresentation(session)) return;
+    session.finalized = true;
+    session.timers.forEach((timer) => globalThis.clearTimeout(timer));
+    session.elements.forEach((element) => element.remove());
+    session.elements = [];
+    session.timers = [];
+    this.renderCoinBalance(session.balance);
+    this.coinPresentation = null;
+    session.onConsumed?.();
+    if (this.coinAnnouncement) {
+      this.coinAnnouncement.textContent = `${session.pending} coins earned; balance ${session.balance}`;
     }
   }
 

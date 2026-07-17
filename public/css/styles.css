@@ -95,6 +95,58 @@ body {
   display: none;
 }
 
+.game .coin-holder {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 300px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 78px;
+  padding: 8px 20px;
+  color: #9b6b00;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.game .coin-art {
+  display: inline-grid;
+  width: 58px;
+  height: 58px;
+  box-sizing: border-box;
+  place-items: center;
+  border: 4px solid currentColor;
+  border-radius: 50%;
+  color: #a66f00;
+  font-family: Georgia, serif;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 1px 1px 0 #f7d774;
+  background: #f4c542;
+  box-shadow: inset 0 0 0 4px #e5a900, 2px 3px 0 rgb(0 0 0 / .15);
+}
+
+.game .coin-amount {
+  display: inline-block;
+  width: 4ch;
+  color: currentColor;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .06em;
+  text-align: center;
+}
+
+.game .coin-plus {
+  display: inline-block;
+  color: #a66f00;
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .game #home-screen h2 {
   position: relative;
   z-index: 1;
@@ -430,6 +482,52 @@ body {
   animation: status-bump .28s ease-out;
 }
 
+.game .flying-coin {
+  position: absolute;
+  z-index: 4;
+  width: 58px;
+  height: 58px;
+  pointer-events: none;
+  animation: coin-flight-x var(--coin-duration, 1100ms) cubic-bezier(.2, 1.35, .35, 1) var(--coin-delay, 0ms) forwards;
+}
+
+.game .flying-coin__travel,
+.game .flying-coin__face {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.game .flying-coin__travel {
+  animation: coin-flight-y var(--coin-duration, 1100ms) cubic-bezier(.7, -.35, .9, .2) var(--coin-delay, 0ms) forwards;
+}
+
+.game .flying-coin__face {
+  animation: coin-spin var(--coin-duration, 1100ms) linear var(--coin-delay, 0ms) forwards;
+  transform-style: preserve-3d;
+}
+
+.game .flying-coin .coin-art {
+  width: 100%;
+  height: 100%;
+  font-size: 34px;
+}
+
+@keyframes coin-flight-x {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--coin-dx, 0px)); }
+}
+
+@keyframes coin-flight-y {
+  from { transform: translateY(0); }
+  to { transform: translateY(var(--coin-dy, 0px)); }
+}
+
+@keyframes coin-spin {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(1080deg); }
+}
+
 @keyframes home-preview-place {
   0%, 4% {
     opacity: 0;
@@ -561,12 +659,18 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .game .cell,
   .game .board,
+  .game .flying-coin,
+  .game .flying-coin__travel,
+  .game .flying-coin__face,
   .game .home-preview-cell {
     transition: none;
   }
 
   .game .cell--placed,
   .game .cell--winner,
+  .game .flying-coin,
+  .game .flying-coin__travel,
+  .game .flying-coin__face,
   .game .home-preview-cell,
   .game .winning-line--active,
   .game .status--updated,

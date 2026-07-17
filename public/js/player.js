@@ -38,6 +38,8 @@ function newPlayer() {
     wins: 0,
     draws: 0,
     losses: 0,
+    coin_balance: 0,
+    pending_coins: 0,
     last_move: null
   };
 }
@@ -62,6 +64,8 @@ function normalizePlayer(value) {
     wins: asCount(value.wins),
     draws: asCount(value.draws),
     losses: asCount(value.losses),
+    coin_balance: asCount(value.coin_balance),
+    pending_coins: asCount(value.pending_coins),
     last_move: value.last_move ?? null
   };
 }
@@ -134,5 +138,32 @@ export function updatePlayerAfterResult(player, game, storage) {
     wins: asCount(player.wins) + (game.winner === "X" ? 1 : 0),
     draws: asCount(player.draws) + (game.draw ? 1 : 0),
     losses: asCount(player.losses) + (game.winner === "O" ? 1 : 0)
+  }, storage);
+}
+
+
+/**
+ * Adds earned coins to both the durable balance and the one-time presentation
+ * queue. Keeping this operation here makes awarding atomic from the app's
+ * point of view and keeps currency rules out of the controller and view.
+ */
+export function awardCoins(player, amount = 3, storage) {
+  if (amount && typeof amount === "object" && storage === undefined) {
+    storage = amount;
+    amount = 3;
+  }
+  const coins = asCount(amount);
+  return savePlayer({
+    ...player,
+    coin_balance: asCount(player.coin_balance) + coins,
+    pending_coins: asCount(player.pending_coins) + coins
+  }, storage);
+}
+
+/** Mark all earned coins as presented without changing the durable balance. */
+export function consumePendingCoins(player, storage) {
+  return savePlayer({
+    ...player,
+    pending_coins: 0
   }, storage);
 }

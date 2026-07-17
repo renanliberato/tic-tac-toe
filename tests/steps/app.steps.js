@@ -192,6 +192,25 @@ When("the winning-line animation completes", async function () {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 700));
 });
 
+When("the coin celebration completes", async function () {
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 1500));
+});
+
+Then("the coin balance shows {string}", function (expected) {
+  assert.equal(this.dom.window.document.querySelector("#coin-amount").textContent, expected);
+});
+
+Then("the coin holder has accessibility label {string}", function (expected) {
+  assert.equal(
+    this.dom.window.document.querySelector("#coin-holder").getAttribute("aria-label"),
+    expected
+  );
+});
+
+Then("the coin announcement says {string}", function (expected) {
+  assert.equal(this.dom.window.document.querySelector("#coin-announcement").textContent, expected);
+});
+
 Then("the turn announcement says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#turn-announcement").textContent, expected);
 });
