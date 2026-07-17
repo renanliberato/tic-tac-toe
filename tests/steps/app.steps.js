@@ -78,6 +78,20 @@ When("I return from the weekly leaderboard", function () {
   button.click();
 });
 
+When("another browser tab changes the leaderboard score to {int}", function (score) {
+  const storage = this.dom.window.localStorage;
+  const oldValue = storage.getItem("tic-tac-toe-player");
+  const player = JSON.parse(oldValue);
+  const newValue = JSON.stringify({ ...player, leaderboard_score: score });
+  storage.setItem("tic-tac-toe-player", newValue);
+  this.dom.window.dispatchEvent(new this.dom.window.StorageEvent("storage", {
+    key: "tic-tac-toe-player",
+    oldValue,
+    newValue,
+    storageArea: storage
+  }));
+});
+
 When("I start matchmaking", function () {
   const button = this.dom.window.document.querySelector("#start-game");
   assert.ok(button, "The Start game button does not exist");
