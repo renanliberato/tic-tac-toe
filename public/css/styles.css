@@ -300,6 +300,8 @@ body {
 }
 
 .game .cell {
+  display: grid;
+  place-items: center;
   align-self: stretch;
   width: 100%;
   height: 100%;

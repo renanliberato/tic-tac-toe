@@ -304,6 +304,11 @@ describe("scaled game layout", () => {
     expect(styles).not.toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(4\.5rem,\s*5rem\)\)/);
   });
 
+  it("centers SVG marks inside each gameplay cell", () => {
+    expect(styles).toMatch(/\.game \.cell\s*\{[^}]*display:\s*grid/s);
+    expect(styles).toMatch(/\.game \.cell\s*\{[^}]*place-items:\s*center/s);
+  });
+
   it("makes each cell fill its square grid track for a usable hit area", () => {
     expect(styles).toMatch(/\.game \.cell\s*\{[^}]*align-self:\s*stretch/s);
     expect(styles).toMatch(/\.game \.cell\s*\{[^}]*width:\s*100%/s);
