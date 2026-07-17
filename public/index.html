@@ -34,7 +34,27 @@
                 <span class="home-preview-cell home-preview-cell--o" style="--preview-delay: 1.05s"><svg class="mark-icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle class="mark-icon__stroke" cx="50" cy="50" r="29" /></svg></span>
             </div>
 
+            <button id="open-leaderboard" class="leaderboard-entry" type="button" aria-label="Open leaderboard">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M20 8h24v9c0 9-4 16-12 20-8-4-12-11-12-20V8Zm0 5H10v5c0 8 5 14 13 15M44 13h10v5c0 8-5 14-13 15M32 37v10m-11 7h22M25 47h14v7" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
             <button id="start-game" type="button" aria-label="Play">Start game</button>
+        </section>
+
+        <section id="leaderboard-screen" class="screen leaderboard-screen" aria-labelledby="leaderboard-title" hidden>
+            <header class="leaderboard-header">
+                <button id="leaderboard-back" type="button" aria-label="Back to home">Back</button>
+                <h2 id="leaderboard-title">Leaderboard</h2>
+            </header>
+            <div class="leaderboard-columns" role="row" aria-label="Leaderboard columns">
+                <span role="columnheader">Position</span>
+                <span role="columnheader">Player</span>
+                <span role="columnheader">Score</span>
+            </div>
+            <p id="leaderboard-message" class="leaderboard-message" hidden></p>
+            <div id="leaderboard-list" class="leaderboard-list" role="table" aria-label="Weekly leaderboard"></div>
+            <button id="floating-local-row" class="leaderboard-row leaderboard-row--local leaderboard-floating" type="button" aria-label="Jump to your leaderboard position" hidden></button>
         </section>
 
         <section id="game-screen" class="screen" aria-labelledby="turn-announcement" hidden>

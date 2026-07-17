@@ -66,6 +66,18 @@ When("I resize the viewport to {int} by {int}", function (width, height) {
   this.dom.window.dispatchEvent(new this.dom.window.Event("resize"));
 });
 
+When("I open the weekly leaderboard", function () {
+  const button = this.dom.window.document.querySelector("#open-leaderboard");
+  assert.ok(button, "The leaderboard button does not exist");
+  button.click();
+});
+
+When("I return from the weekly leaderboard", function () {
+  const button = this.dom.window.document.querySelector("#leaderboard-back");
+  assert.ok(button, "The leaderboard back button does not exist");
+  button.click();
+});
+
 When("I start matchmaking", function () {
   const button = this.dom.window.document.querySelector("#start-game");
   assert.ok(button, "The Start game button does not exist");
@@ -111,6 +123,41 @@ Then("the page scale fits the viewport", function () {
   );
 
   assert.equal(page.style.getPropertyValue("--page-scale"), String(expectedScale));
+});
+
+Then("the leaderboard screen is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, false);
+});
+
+Then("the leaderboard screen is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, true);
+});
+
+Then("the leaderboard shows its position, player, and score columns", function () {
+  const columns = [...this.dom.window.document.querySelectorAll(
+    "#leaderboard-screen [role=columnheader]"
+  )].map((column) => column.textContent);
+  assert.deepEqual(columns, ["Position", "Player", "Score"]);
+});
+
+Then("the leaderboard shows the local player with score {int}", function (score) {
+  const stored = JSON.parse(this.dom.window.localStorage.getItem("tic-tac-toe-player"));
+  const row = this.dom.window.document.querySelector("#leaderboard-local-row");
+  assert.ok(row, "The local leaderboard row does not exist");
+  assert.equal(row.querySelector(".leaderboard-row__player").textContent, `${stored.player_name} (You)`);
+  assert.equal(row.querySelector(".leaderboard-row__score").textContent, String(score));
+});
+
+Then("the leaderboard shows ranked opponents", function () {
+  const opponents = [...this.dom.window.document.querySelectorAll(
+    "#leaderboard-list .leaderboard-row:not(#leaderboard-local-row)"
+  )];
+  assert.ok(opponents.length > 0, "No ranked opponents are shown");
+  assert.match(opponents[0].querySelector(".leaderboard-row__position").textContent, /^\d+$/);
+});
+
+Then("the leaderboard button has focus", function () {
+  assert.equal(this.dom.window.document.activeElement.id, "open-leaderboard");
 });
 
 Then("the matchmaking dialog is visible", function () {
