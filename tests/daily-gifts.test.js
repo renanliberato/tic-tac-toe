@@ -216,6 +216,38 @@ describe("daily gift presentation ordering", () => {
     delete globalThis.localStorage;
   });
 
+  it("presents pending coins added by a storage update during an active presentation", () => {
+    const storage = store();
+    playerWithPending(storage);
+    globalThis.localStorage = storage;
+    let storageListener;
+    const view = {
+      ...controllerView(),
+      document: { defaultView: { addEventListener: (type, listener) => {
+        if (type === "storage") storageListener = listener;
+      } } }
+    };
+    const controller = new GameController(new GameModel(), view);
+
+    view.giftHandlers.dismiss();
+    const external = {
+      ...controller.player,
+      coin_balance: 13,
+      pending_coins: 13,
+      daily_gift: { ...controller.player.daily_gift, claimed: true, revision: 1 }
+    };
+    storage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(external));
+    storageListener({ key: PLAYER_STORAGE_KEY });
+
+    expect(view.presentations.map(item => item.amount)).toEqual([3]);
+    view.presentations[0].complete();
+    expect(view.presentations.map(item => item.amount)).toEqual([3, 10]);
+    view.presentations[1].complete();
+    expect(controller.player.pending_coins).toBe(0);
+    expect(controller.scheduledPendingCoins).toBe(0);
+    delete globalThis.localStorage;
+  });
+
   it("does not schedule the same pending backlog twice", () => {
     const storage = store();
     playerWithPending(storage);

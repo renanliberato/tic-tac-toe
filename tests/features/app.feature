@@ -177,3 +177,19 @@ Feature: Playing against the Computer
     And the coin balance shows "0010"
     And player statistics include:
       | coin_balance | 10 |
+
+  Scenario: A reward synced during a coin celebration is presented next
+    Given I open the tic-tac-toe game with 3 pending coins
+    When I dismiss daily gifts
+    Then a coin celebration is active
+    When another tab claims the daily gift
+    And the coin celebration completes
+    Then a coin celebration is active
+    And player statistics include:
+      | coin_balance  | 13 |
+      | pending_coins | 10 |
+    When the coin celebration completes
+    Then the coin balance shows "0013"
+    And player statistics include:
+      | coin_balance  | 13 |
+      | pending_coins | 0  |

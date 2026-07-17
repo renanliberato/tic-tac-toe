@@ -13,7 +13,16 @@ class AppWorld {
   async openGame(player = null) {
     const html = await fs.readFile(htmlPath, "utf8");
     this.dom = new JSDOM(html, { url: "http://localhost/" });
-    if (player) {
+    if (typeof player === "number" && player > 0) {
+      const now = new Date();
+      const eligibleDate = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+      this.dom.window.localStorage.setItem("tic-tac-toe-player", JSON.stringify({
+        player_id: "00000000-0000-4000-8000-000000000001",
+        coin_balance: player,
+        pending_coins: player,
+        daily_gift: { day: 1, claimed: false, eligible_date: eligibleDate, revision: 0 }
+      }));
+    } else if (player) {
       this.dom.window.localStorage.setItem("tic-tac-toe-player", JSON.stringify({
         player_id: "123e4567-e89b-42d3-a456-426614174000",
         ...player
@@ -66,6 +75,11 @@ After(function () {
 
 Given("I open the tic-tac-toe game", async function () {
   await this.openGame();
+  assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
+});
+
+Given("I open the tic-tac-toe game with {int} pending coins", async function (amount) {
+  await this.openGame(amount);
   assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
 });
 
@@ -534,4 +548,14 @@ Then("the matchmaking dialog is visible", function () {
 
 Then("the matchmaking dialog is hidden", function () {
   assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, false);
+});
+
+When("I dismiss daily gifts", function () {
+  const dialog = this.dom.window.document.querySelector("#daily-gifts-dialog");
+  assert.ok(dialog, "The daily gifts dialog does not exist");
+  dialog.dispatchEvent(new this.dom.window.Event("cancel", { cancelable: true }));
+});
+
+Then("a coin celebration is active", function () {
+  assert.ok(this.dom.window.document.querySelector("[data-flying-coin]"));
 });
