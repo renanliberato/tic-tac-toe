@@ -21,6 +21,8 @@ function createFlowSandbox() {
   const logFile = path.join(directory, "runtime.log");
 
   runGit(directory, "init", "--quiet");
+  runGit(directory, "config", "user.email", "test@example.com");
+  runGit(directory, "config", "user.name", "Flow Test");
   writeFileSync(path.join(directory, "README"), "test\n");
   runGit(directory, "add", "README");
   runGit(directory, "-c", "user.email=test@example.com", "-c", "user.name=Flow Test", "commit", "--quiet", "-m", "test");
@@ -70,10 +72,65 @@ function runFlow(model) {
   return { ...sandbox, result, log: readFileSync(sandbox.logFile, "utf8").trim().split("\n") };
 }
 
+function runRefinedFlow() {
+  const sandbox = createFlowSandbox();
+  const promptLog = path.join(sandbox.directory, "prompt.log");
+  writeFileSync(path.join(sandbox.directory, "refine"), `#!/bin/sh
+printf 'refine args=%s\n' "$*" >> "$DEV_FLOW_LOG"
+mkdir -p tasks
+printf '# Refined task\n' > tasks/refined.md
+printf './tasks/refined.md\n'
+`);
+  chmodSync(path.join(sandbox.directory, "refine"), 0o755);
+  writeFileSync(path.join(sandbox.directory, "bin", "mswea"), `#!/bin/sh
+printf 'mswea model=%s\n' "$1" >> "$DEV_FLOW_LOG"
+printf '%s\n' "$*" > "$DEV_FLOW_PROMPT_LOG"
+case "$*" in
+  *'implement ./tasks/refined.md. delete the task file after finishing'*) rm -f tasks/refined.md ;;
+esac
+`);
+  chmodSync(path.join(sandbox.directory, "bin", "mswea"), 0o755);
+  const environment = {
+    ...process.env,
+    DEV_FLOW_LOG: sandbox.logFile,
+    DEV_FLOW_PROMPT_LOG: promptLog,
+    PATH: `${sandbox.binDirectory}${path.delimiter}${process.env.PATH ?? ""}`
+  };
+  const result = spawnSync("./dev-flow", ["--refine-auto", "Add a leaderboard"], {
+    cwd: sandbox.directory,
+    env: environment,
+    encoding: "utf8"
+  });
+  return { ...sandbox, result, prompt: readFileSync(promptLog, "utf8"), log: readFileSync(sandbox.logFile, "utf8").trim().split("\n") };
+}
+
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+describe("--refine-auto", () => {
+  it("commits the refined task, checkpoints it, and implements its path", () => {
+    const { result, directory, log, prompt } = runRefinedFlow();
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(log).toEqual([
+      "./git-sync model=codex:gpt-5.6-luna@high",
+      "git-worktree-create model=codex:gpt-5.6-luna@high",
+      "./git-save model=codex:gpt-5.6-luna@high",
+      "refine args=--auto --print-task-path Add a leaderboard",
+      "./git-save model=codex:gpt-5.6-luna@high",
+      "mswea model=codex:gpt-5.6-luna@high",
+      "./git-commit model=codex:gpt-5.6-luna@high",
+      "./ensure-tests model=codex:gpt-5.6-luna@high",
+      "./code-review model=codex:gpt-5.6-luna@high",
+      "./git-worktree-merge model=codex:gpt-5.6-luna@high"
+    ]);
+    expect(prompt).toContain("implement ./tasks/refined.md. delete the task file after finishing");
+    expect(readFileSync(path.join(directory, ".git", "logs", "HEAD"), "utf8")).toContain("docs: add refined task");
+    expect(() => readFileSync(path.join(directory, "tasks", "refined.md"))).toThrow();
+  }, 30000);
 });
 
 describe("DEV_FLOW_MODEL", () => {

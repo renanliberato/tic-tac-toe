@@ -3,6 +3,9 @@
 # Set DEV_FLOW_MODEL before invoking this script to select the mswea model.
 # It defaults to codex:gpt-5.6-luna@high.
 #
+# Pass --refine-auto before the prompt to turn it into a committed task file
+# and have the implementation agent work from that file.
+#
 # This script deliberately performs `cd` itself. A child process such as
 # ./git-worktree-create or xargs cannot change the directory of this script's
 # caller, but this script can change its own directory before running the
@@ -21,13 +24,38 @@ cd "$repo_root" || exit 1
 DEV_FLOW_MODEL=${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}
 export DEV_FLOW_MODEL
 
+refine_auto=false
+if [ "${1-}" = '--refine-auto' ]; then
+    refine_auto=true
+    shift
+    [ "$#" -gt 0 ] || {
+        printf '%s\n' 'dev-flow: --refine-auto requires a prompt' >&2
+        exit 1
+    }
+fi
+
 ./git-sync
 worktree_path=$(./git-worktree-create)
 cd "$worktree_path" || exit 1
 
 ./git-save
+prompt=$*
+if [ "$refine_auto" = true ]; then
+    task_path=$(./refine --auto --print-task-path "$prompt")
+    [ -n "$task_path" ] || {
+        printf '%s\n' 'dev-flow: refine did not return a task path' >&2
+        exit 1
+    }
+    git add -- "$task_path"
+    git commit -m 'docs: add refined task'
+    # git-commit resets to the latest git-save checkpoint. Update it after the
+    # task commit so the task remains a separate commit from implementation.
+    ./git-save
+    prompt="implement $task_path. delete the task file after finishing"
+fi
+
 if [ "$#" -gt 0 ]; then
-    mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$*"
+    mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt"
 else
     mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately
 fi

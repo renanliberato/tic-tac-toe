@@ -11,11 +11,35 @@ fail() {
 }
 
 auto=false
-if [ "${1-}" = '--auto' ]; then
-    auto=true
-    shift
+print_task_path=false
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --auto)
+            auto=true
+            shift
+            ;;
+        --print-task-path)
+            print_task_path=true
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT (optional: --print-task-path)'
+
+# Automation callers need a machine-readable stdout value, while the normal
+# interview remains visible to the user. Keep all progress on stderr when the
+# task path is requested and reserve stdout for that path.
+if [ "$print_task_path" = true ]; then
+    exec 4>&1
+    exec 1>&2
 fi
-[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT'
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 'not inside a Git work tree'
 cd "$repo_root" || exit 1
@@ -227,7 +251,11 @@ PY
         [ -s "$task_file" ] || fail 'agent finished without creating a non-empty task file'
         relative_task=${task_file#"$repo_root"/}
         completed=true
-        printf '\n%s\n' "Refinement finished: ./$relative_task"
+        if [ "$print_task_path" = true ]; then
+            printf '%s\n' "./$relative_task" >&4
+        else
+            printf '\n%s\n' "Refinement finished: ./$relative_task"
+        fi
         exit 0
     fi
 

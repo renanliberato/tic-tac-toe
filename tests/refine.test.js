@@ -152,6 +152,22 @@ describe("refine", () => {
     expect(readFileSync(count, "utf8")).toBe("3");
   });
 
+  it("prints only the saved task path for automation callers", () => {
+    const bin = fakeAgent();
+    const result = spawnSync("./refine", ["--auto", "--print-task-path", "Improve the game"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_LOG: path.join(bin, "prompts.log"), REFINE_COUNT: path.join(bin, "count"), REFINE_MODEL: "test:model" },
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^\.\/tasks\/[a-f0-9]{6}-todo\.md$/);
+    expect(result.stderr).toContain("refine: consulting agent");
+    expect(result.stderr).not.toContain("Refinement finished:");
+    const taskPath = result.stdout.trim();
+    generatedTasks.push(path.join(root, taskPath.slice(2)));
+  });
+
   it("rejects an unrelated question tagged as final confirmation", () => {
     const bin = unrelatedConfirmationAgent();
     const count = path.join(bin, "count");
