@@ -10,7 +10,12 @@ fail() {
     exit 1
 }
 
-[ "$#" -gt 0 ] || fail 'usage: ./refine PROMPT'
+auto=false
+if [ "${1-}" = '--auto' ]; then
+    auto=true
+    shift
+fi
+[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT'
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 'not inside a Git work tree'
 cd "$repo_root" || exit 1
@@ -47,7 +52,8 @@ response_file=$session_dir/response.json
 ui_script=$session_dir/ask-questions.py
 cat > "$ui_script" <<'PY'
 import json, os, sys
-response_path, history_path, round_number = sys.argv[1:]
+response_path, history_path, round_number, auto = sys.argv[1:]
+auto = auto == "true"
 with open(response_path, encoding="utf-8") as stream:
     response = json.load(stream)
 def read_answer(prompt):
@@ -68,11 +74,15 @@ print(f"\n=== Refinement round {round_number}: {total} question(s) ===")
 for index, item in enumerate(questions, 1):
     print(f"\n[{index}/{total}] {item['question']}")
     print(f"Recommendation: {item['recommendation']}")
-    try:
-        answer = read_answer("Your answer: ")
-    except EOFError:
-        print("\nrefine: input ended before all questions were answered", file=sys.stderr)
-        raise SystemExit(3)
+    if auto:
+        answer = "yes" if item.get("kind") == "FINAL_CONFIRMATION" else item["recommendation"]
+        print(f"Auto-answer: {answer}")
+    else:
+        try:
+            answer = read_answer("Your answer: ")
+        except EOFError:
+            print("\nrefine: input ended before all questions were answered", file=sys.stderr)
+            raise SystemExit(3)
     recorded = {
         "question": item["question"],
         "recommendation": item["recommendation"],
@@ -221,7 +231,7 @@ PY
         exit 0
     fi
 
-    if ! python3 "$ui_script" "$response_file" "$history_file" "$round" <&3
+    if ! python3 "$ui_script" "$response_file" "$history_file" "$round" "$auto" <&3
     then
         fail 'interview cancelled'
     fi
