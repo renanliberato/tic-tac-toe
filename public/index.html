@@ -44,6 +44,12 @@
                     <path d="M20 8h24v9c0 9-4 16-12 20-8-4-12-11-12-20V8Zm0 5H10v5c0 8 5 14 13 15M44 13h10v5c0 8-5 14-13 15M32 37v10m-11 7h22M25 47h14v7" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
+            <button id="open-battle-pass" class="battle-pass-entry" type="button" aria-label="Open battle pass">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M32 6 52 14v16c0 13-8 23-20 28C20 53 12 43 12 30V14L32 6Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/>
+                    <path d="m22 32 7 7 14-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
             <div class="start-game-wrap">
                 <button id="start-game" type="button" aria-label="Play">Start game</button>
                 <div class="win-streak" data-win-streak role="status" aria-live="polite" aria-atomic="true">
@@ -70,6 +76,19 @@
             <p id="leaderboard-message" class="leaderboard-message" hidden></p>
             <div id="leaderboard-list" class="leaderboard-list" role="table" aria-label="Weekly leaderboard"></div>
             <button id="floating-local-row" class="leaderboard-row leaderboard-row--local leaderboard-floating" type="button" aria-label="Jump to your leaderboard position" hidden></button>
+        </section>
+
+        <section id="battle-pass-screen" class="screen secondary-screen battle-pass-screen" aria-labelledby="battle-pass-title" hidden>
+            <header class="screen-header">
+                <button id="battle-pass-back" class="back-button" type="button" aria-label="Back to Home"><span aria-hidden="true">←</span><span>Back</span></button>
+                <h2 id="battle-pass-title" tabindex="-1">Battle Pass</h2>
+            </header>
+            <div class="battle-pass-summary">
+                <strong data-battle-pass-progress>0 / 100 points</strong>
+                <span data-battle-pass-reset></span>
+            </div>
+            <div id="battle-pass-list" class="battle-pass-list" aria-label="Battle pass milestones"></div>
+            <p id="battle-pass-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
 
         <section id="profile-screen" class="screen secondary-screen" aria-labelledby="profile-title" hidden>

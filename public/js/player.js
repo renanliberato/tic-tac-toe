@@ -1,5 +1,6 @@
 import { createOpponent, createUuid, getNameForId } from "./identity.js";
 import { getCycle } from "./leaderboard.js";
+import { normalizeBattlePass, awardBattlePassPoint, claimBattlePassMilestone } from "./battle-pass.js";
 import { DEFAULT_STYLE_ID, getBoardStyle, isBoardStyleId } from "./board-styles.js";
 
 export const PLAYER_STORAGE_KEY = "tic-tac-toe-player";
@@ -47,7 +48,10 @@ function newPlayer() {
     leaderboard_cycle: null,
     leaderboard_score: 0,
     owned_styles: [DEFAULT_STYLE_ID],
-    equipped_style: DEFAULT_STYLE_ID
+    equipped_style: DEFAULT_STYLE_ID,
+    battle_pass_cycle: null,
+    battle_pass_points: 0,
+    battle_pass_claimed: []
   };
 }
 
@@ -94,7 +98,8 @@ export function normalizePlayer(value, timestamp = Date.now()) {
     owned_styles: normalizeOwnedStyles(value.owned_styles),
     equipped_style: isBoardStyleId(value.equipped_style)
       && normalizeOwnedStyles(value.owned_styles).includes(value.equipped_style)
-      ? value.equipped_style : DEFAULT_STYLE_ID
+      ? value.equipped_style : DEFAULT_STYLE_ID,
+    ...normalizeBattlePass(value, timestamp)
   };
 }
 function readPlayer(storage, timestamp = Date.now()) {
@@ -163,6 +168,15 @@ export function awardLeaderboardPoint(player, timestamp = Date.now(), storage) {
     ...reconciled,
     leaderboard_score: asCount(reconciled.leaderboard_score) + 1
   }, storage, timestamp);
+}
+
+export function awardPlayerBattlePassPoint(player, timestamp = Date.now(), storage) {
+  return savePlayer(awardBattlePassPoint(player, timestamp), storage, timestamp);
+}
+
+export function claimPlayerBattlePassMilestone(player, milestone, storage, timestamp = Date.now()) {
+  const result = claimBattlePassMilestone(player, milestone, timestamp);
+  return { ...result, player: savePlayer(result.player, storage, timestamp) };
 }
 
 export function reloadPlayer(storage, timestamp = Date.now()) {
