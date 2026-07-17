@@ -248,6 +248,16 @@ describe("scaled game layout", () => {
     expect(styles).toMatch(/\.game #home-screen p\s*\{[^}]*font-size:\s*40px/s);
   });
 
+  it("keeps the home controls at the edges and animates a centered preview", () => {
+    expect(styles).toMatch(/\.game #home-screen\s*\{[^}]*justify-content:\s*space-between/s);
+    expect(styles).toMatch(/\.game #home-screen\s*\{[^}]*padding:\s*72px 64px/s);
+    expect(styles).toMatch(/\.game \.home-preview\s*\{[^}]*top:\s*50%/s);
+    expect(styles).toMatch(/\.game \.home-preview\s*\{[^}]*left:\s*50%/s);
+    expect(styles).toMatch(/\.game \.home-preview\s*\{[^}]*grid-template-columns:\s*repeat\(3/s);
+    expect(styles).toMatch(/\.game \#start-game\s*\{[^}]*transform:\s*scale\(3\)/s);
+    expect(styles).toMatch(/\.game \.home-preview-cell\s*\{[^}]*animation:\s*home-preview-place/s);
+  });
+
   it("caps the board and distributes its cells across the board", () => {
     expect(styles).toMatch(/\.game \.board\s*\{[^}]*width:\s*min\(100%,\s*var\(--board-width\)\)/s);
     expect(styles).toMatch(/\.game \.board\s*\{[^}]*aspect-ratio:\s*1\b/s);
