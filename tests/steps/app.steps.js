@@ -16,9 +16,11 @@ class AppWorld {
     globalThis.window = this.dom.window;
     globalThis.document = this.dom.window.document;
     this.nativeSetTimeout = globalThis.setTimeout;
+    this.nativeRandom = Math.random;
+    Math.random = () => 0;
     globalThis.setTimeout = (callback, delay, ...args) => this.nativeSetTimeout(
       callback,
-      delay === 3000 ? 1 : delay,
+      delay === 500 ? 1 : delay,
       ...args
     );
 
@@ -47,6 +49,7 @@ After(function () {
   this.turnAnnouncementObserver?.disconnect();
   this.dom.window.close();
   globalThis.setTimeout = this.nativeSetTimeout;
+  Math.random = this.nativeRandom;
   delete globalThis.window;
   delete globalThis.document;
 });
@@ -60,16 +63,14 @@ When("I click cell {int}", function (number) {
   this.cell(number).click();
 });
 
+When("the computer move completes", async function () {
+  await new Promise((resolve) => this.nativeSetTimeout(resolve, 10));
+});
+
 When("I resize the viewport to {int} by {int}", function (width, height) {
   Object.defineProperty(this.dom.window, "innerWidth", { configurable: true, value: width });
   Object.defineProperty(this.dom.window, "innerHeight", { configurable: true, value: height });
   this.dom.window.dispatchEvent(new this.dom.window.Event("resize"));
-});
-
-When("I start matchmaking", function () {
-  const button = this.dom.window.document.querySelector("#start-game");
-  assert.ok(button, "The Start game button does not exist");
-  button.click();
 });
 
 When("I watch the turn announcement", function () {
@@ -82,19 +83,11 @@ When("I watch the turn announcement", function () {
   this.turnAnnouncementObserver.observe(announcement, { childList: true, characterData: true, subtree: true });
 });
 
-When("matchmaking completes", async function () {
-  await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
-});
-
-When("I click the {string} button", async function (label) {
+When("I click the {string} button", function (label) {
   const button = [...this.dom.window.document.querySelectorAll("button")]
     .find((candidate) => candidate.textContent === label);
   assert.ok(button, `A button labelled ${label} does not exist`);
   button.click();
-
-  if (label === "Start game") {
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
-  }
 });
 
 When("I try to dismiss the result dialog", function () {
@@ -111,14 +104,6 @@ Then("the page scale fits the viewport", function () {
   );
 
   assert.equal(page.style.getPropertyValue("--page-scale"), String(expectedScale));
-});
-
-Then("the matchmaking dialog is visible", function () {
-  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, true);
-});
-
-Then("the matchmaking dialog is hidden", function () {
-  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, false);
 });
 
 Then("the home screen is visible", function () {
@@ -147,13 +132,11 @@ Then("the local player card shows a friendly name", function () {
   assert.notEqual(name, "You");
 });
 
-Then("the opponent card shows a friendly name", function () {
-  const card = this.dom.window.document.querySelector("[data-player=\"opponent\"]");
-  const name = this.dom.window.document.querySelector("#opponent-name").textContent.trim();
-
-  assert.ok(card, "The opponent card does not exist");
-  assert.equal(card.hidden, false);
-  assert.match(name, /^[A-Za-z]+$/);
+Then("the opponent card shows the Computer", function () {
+  const documentRef = this.dom.window.document;
+  assert.equal(documentRef.querySelector("#opponent-name").textContent, "Computer");
+  assert.equal(documentRef.querySelector("[data-player=\"opponent\"] .player-role").textContent, "AI Opponent");
+  assert.equal(documentRef.querySelector("[data-player=\"opponent\"]").hidden, false);
 });
 
 Then("the first board cell has focus", function () {

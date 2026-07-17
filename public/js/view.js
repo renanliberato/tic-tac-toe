@@ -49,7 +49,6 @@ export class GameView {
     this.opponentPanel = documentRef.querySelector("[data-player=\"opponent\"]");
     this.playerScore = documentRef.querySelector("#player-score");
     this.opponentScore = documentRef.querySelector("#opponent-score");
-    this.matchmakingDialog = documentRef.querySelector("#matchmaking-dialog");
     this.resultDialog = documentRef.querySelector("#result-dialog");
     this.resultMessage = documentRef.querySelector("#result-message");
     this.resultDetail = documentRef.querySelector("#result-detail");
@@ -89,13 +88,12 @@ export class GameView {
   }
 
   bindDialogGuards() {
-    this.preventDialogDismissal(this.matchmakingDialog);
     this.preventDialogDismissal(this.resultDialog);
   }
 
-  render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null) {
+  render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null, aiPending = false) {
     if (!this.coinPresentation) this.renderCoinBalance(player?.coin_balance ?? 0);
-    this.renderPlayers(player, opponent, state, gameStarted, matchScore);
+    this.renderPlayers(player, opponent, state, gameStarted, matchScore, aiPending);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
       cell.replaceChildren(mark ? this.createMarkIcon(mark) : "");
@@ -105,15 +103,18 @@ export class GameView {
       cell.setAttribute("aria-label", mark
         ? `Cell ${index + 1}, ${mark}`
         : `Cell ${index + 1}`);
-      cell.disabled = !gameStarted || Boolean(mark) || Boolean(state.winner) || state.draw;
+      cell.disabled = !gameStarted || state.player !== "X" || aiPending
+        || Boolean(mark) || Boolean(state.winner) || state.draw;
     });
 
     const feedback = state.draw ? "It\'s a draw!" : "";
     this.status.textContent = feedback;
     if (this.turnAnnouncement) {
       this.turnAnnouncement.textContent = feedback || (state.winner
-        ? `Player ${state.winner} won!`
-        : (gameStarted ? `Player ${state.player}\'s turn` : ""));
+        ? (state.winner === "X" ? "You won!" : "Computer won!")
+        : (gameStarted ? (state.player === "X" && !aiPending
+          ? "Your turn"
+          : "Computer is thinking…") : ""));
     }
     this.status.classList.toggle("status--winner", Boolean(state.winner));
     this.status.classList.toggle("status--draw", state.draw);
@@ -456,11 +457,6 @@ export class GameView {
     this.start?.focus();
   }
 
-  showMatchmaking() {
-    this.homeScreen.hidden = true;
-    this.gameScreen.hidden = true;
-  }
-
   showGame() {
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = false;
@@ -473,7 +469,9 @@ export class GameView {
   openResultDialog(state) {
     if ((!state.winner && !state.draw) || !this.resultDialog || this.resultDialog.open) return;
 
-    this.resultMessage.textContent = state.winner ? `${state.winner} Won` : "Draw";
+    this.resultMessage.textContent = state.winner
+      ? (state.winner === "X" ? "You won!" : "Computer won!")
+      : "Draw";
     if (this.resultDetail) {
       this.resultDetail.textContent = state.winner
         ? "Three in a row!"
@@ -484,14 +482,6 @@ export class GameView {
 
   closeResultDialog() {
     this.closeDialog(this.resultDialog);
-  }
-
-  openMatchmakingDialog() {
-    this.openDialog(this.matchmakingDialog);
-  }
-
-  closeMatchmakingDialog() {
-    this.closeDialog(this.matchmakingDialog);
   }
 
   openDialog(dialog, focusTarget) {

@@ -1,5 +1,4 @@
 import { getWinningLine } from "./game.js";
-import { createOpponent } from "./identity.js";
 import {
   getOrCreatePlayer,
   startPlayerGame,
@@ -9,24 +8,28 @@ import {
   consumePendingCoins
 } from "./player.js";
 
-const MATCHMAKING_DURATION = 3000;
+const AI_MOVE_DELAY = 500;
 const MATCH_POINTS_TO_WIN = 3;
+const COMPUTER_OPPONENT = Object.freeze({
+  opponent_id: "computer",
+  opponent_name: "Computer",
+  opponent_role: "AI Opponent"
+});
 
 function createMatchScore() {
   return { X: 0, O: 0 };
 }
 
-/**
- * Coordinates user actions and application state without directly touching
- * the DOM. The controller is the glue between the model and the view.
- */
+/** Coordinates user actions and application state without touching the DOM. */
 export class GameController {
-  constructor(model, view, timer = globalThis) {
+  constructor(model, view, timer = globalThis, random = Math.random) {
     this.model = model;
     this.view = view;
     this.timer = timer;
+    this.random = random;
     this.gameStarted = false;
-    this.matchmakingTimer = null;
+    this.aiTimer = null;
+    this.aiPending = false;
     this.player = getOrCreatePlayer();
     this.opponent = null;
     this.matchScore = createMatchScore();
@@ -41,7 +44,7 @@ export class GameController {
   }
 
   bindViewEvents() {
-    this.view.onStart(() => this.startMatchmaking());
+    this.view.onStart(() => this.startGame());
     this.view.cells.forEach((_, index) => {
       this.view.onCell(index, () => this.play(index));
     });
@@ -57,14 +60,70 @@ export class GameController {
       winningLine,
       this.player,
       this.opponent,
-      this.matchScore
+      this.matchScore,
+      this.aiPending
     );
   }
 
   play(index) {
-    if (!this.gameStarted || !this.model.makeMove(index)) return;
+    const state = this.model.getState();
+    if (!this.gameStarted || this.aiPending || state.player !== "X"
+      || state.winner || state.draw || state.board[index] !== null) return;
+
+    // Set this before makeMove notifies the view so there is never an unlocked
+    // render between the human move and the computer delay.
+    this.aiPending = true;
+    if (!this.model.makeMove(index)) {
+      this.aiPending = false;
+      this.render();
+      return;
+    }
 
     this.player = updatePlayerAfterMove(this.player, this.model.getState(), index);
+    const acceptedState = this.model.getState();
+    const terminal = Boolean(acceptedState.winner || acceptedState.draw);
+    this.finishMove(index);
+
+    if (terminal) {
+      this.aiPending = false;
+      this.render();
+      return;
+    }
+
+    this.scheduleComputerMove();
+  }
+
+  scheduleComputerMove() {
+    const scheduledRoundId = this.roundId;
+    this.cancelComputerMove(false);
+    this.aiPending = true;
+    this.render();
+    this.aiTimer = this.timer.setTimeout(() => {
+      this.aiTimer = null;
+      if (!this.isCurrentRound(scheduledRoundId)) return;
+
+      const state = this.model.getState();
+      if (!this.aiPending || state.player !== "O" || state.winner || state.draw) return;
+      const freeCells = state.board
+        .map((mark, index) => mark === null ? index : null)
+        .filter((index) => index !== null);
+      if (!freeCells.length) {
+        this.aiPending = false;
+        this.render();
+        return;
+      }
+
+      const randomValue = Number(this.random());
+      const randomIndex = Number.isFinite(randomValue)
+        ? Math.min(freeCells.length - 1, Math.max(0, Math.floor(randomValue * freeCells.length)))
+        : 0;
+      const index = freeCells[randomIndex];
+      this.aiPending = false;
+      if (this.model.makeMove(index)) this.finishMove(index);
+    }, AI_MOVE_DELAY);
+  }
+
+  finishMove(index) {
     const state = this.model.getState();
     const completedRoundId = this.roundId;
     this.recordResult(state);
@@ -74,50 +133,30 @@ export class GameController {
       const finalRound = this.matchScore[state.winner] >= MATCH_POINTS_TO_WIN;
       this.view.animateWinningLine(getWinningLine(state.board)).then(() => {
         if (!this.isCurrentRound(completedRoundId)) return;
-        if (finalRound) {
-          this.showResult();
-        } else {
-          this.startNextRound(completedRoundId);
-        }
+        if (finalRound) this.showResult();
+        else this.startNextRound(completedRoundId);
       });
     } else if (state.draw) {
       this.startNextRound(completedRoundId);
     }
   }
 
+  // Retained as a compatibility alias for integrations that used the old
+  // entry point. Local games no longer enter or wait in a matchmaking queue.
   startMatchmaking() {
-    this.view.finishCoinPresentation?.();
-    if (this.matchmakingTimer !== null) return;
-
-    this.view.closeResultDialog();
-    this.view.resetFeedback();
-    this.opponent = createOpponent();
-    this.matchScore = createMatchScore();
-    this.resultRecorded = false;
-    this.roundId += 1;
-    this.gameStarted = false;
-    this.model.reset();
-    this.view.showMatchmaking();
-    this.view.openMatchmakingDialog();
-
-    this.matchmakingTimer = this.timer.setTimeout(() => {
-      this.matchmakingTimer = null;
-      this.startGame();
-    }, MATCHMAKING_DURATION);
-    this.render();
+    this.startGame();
   }
 
   startGame() {
-    this.stopMatchmaking();
+    this.view.finishCoinPresentation?.();
+    this.cancelComputerMove();
     this.view.closeResultDialog();
     this.view.resetFeedback();
     this.gameStarted = true;
+    this.opponent = COMPUTER_OPPONENT;
     this.matchScore = createMatchScore();
     this.resultRecorded = false;
     this.roundId += 1;
-    // startGame can also be called directly by an integration, so keep every
-    // actual game covered even when matchmaking was skipped.
-    this.opponent ||= createOpponent();
     this.player = startPlayerGame(this.player);
     this.view.showGame();
     this.model.reset();
@@ -127,6 +166,7 @@ export class GameController {
   startNextRound(completedRoundId) {
     if (!this.isCurrentRound(completedRoundId) || this.isMatchOver()) return;
 
+    this.cancelComputerMove();
     this.view.resetFeedback();
     this.resultRecorded = false;
     this.roundId += 1;
@@ -136,7 +176,7 @@ export class GameController {
   }
 
   showHome() {
-    this.stopMatchmaking();
+    this.cancelComputerMove();
     this.view.resetFeedback();
     this.opponent = null;
     this.view.closeResultDialog();
@@ -153,12 +193,14 @@ export class GameController {
     });
   }
 
-  stopMatchmaking() {
-    if (this.matchmakingTimer !== null) {
-      this.timer.clearTimeout(this.matchmakingTimer);
-      this.matchmakingTimer = null;
+  cancelComputerMove(render = true) {
+    if (this.aiTimer !== null) {
+      this.timer.clearTimeout(this.aiTimer);
+      this.aiTimer = null;
     }
-    this.view.closeMatchmakingDialog();
+    const changed = this.aiPending;
+    this.aiPending = false;
+    if (render && changed) this.render();
   }
 
   recordResult(state) {
@@ -173,9 +215,7 @@ export class GameController {
         [state.winner]: this.matchScore[state.winner] + 1
       };
     }
-    if (matchWinner && state.winner === "X") {
-      this.player = awardCoins(this.player, 3);
-    }
+    if (matchWinner && state.winner === "X") this.player = awardCoins(this.player, 3);
     this.resultRecorded = true;
     this.render();
   }
@@ -193,4 +233,4 @@ export class GameController {
   }
 }
 
-export { MATCHMAKING_DURATION, MATCH_POINTS_TO_WIN, createMatchScore };
+export { AI_MOVE_DELAY, MATCH_POINTS_TO_WIN, COMPUTER_OPPONENT, createMatchScore };
