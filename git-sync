@@ -25,10 +25,11 @@ case "$git_common_dir" in
     *) git_common_dir="$repo_root/$git_common_dir" ;;
 esac
 merge_lock="$git_common_dir/git-worktree-merge.lock"
-if ! (set -C; : > "$merge_lock") 2>/dev/null; then
-    printf 'git-sync: another merge holds %s\n' "$merge_lock" >&2
-    exit 1
-fi
+# Lock acquisition must wait: sync can be started by a merge in another
+# worktree, and abandoning it would skip synchronization for that branch.
+while ! (set -C; : > "$merge_lock") 2>/dev/null; do
+    sleep 1
+done
 merge_lock_owned=true
 printf '%s\n' "$$" > "$merge_lock"
 trap release_merge_lock INT TERM HUP EXIT

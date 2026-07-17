@@ -11,12 +11,14 @@ acquire_lock() {
         *) git_common_dir="$main_root/$git_common_dir" ;;
     esac
     merge_lock="$git_common_dir/git-worktree-merge.lock"
-    if (set -C; : > "$merge_lock") 2>/dev/null; then
-        merge_lock_owned=true
-        printf '%s\n' "$$" > "$merge_lock"
-        return 0
-    fi
-    return 1
+    # Never abandon a merge because another merge is still using the shared
+    # lock. Retry the atomic create until the current owner releases it.
+    while ! (set -C; : > "$merge_lock") 2>/dev/null; do
+        sleep 1
+    done
+    merge_lock_owned=true
+    printf '%s\n' "$$" > "$merge_lock"
+    return 0
 }
 
 release_lock() {
@@ -110,11 +112,7 @@ main() {
     merge_lock=''
     merge_lock_owned=false
     if ! acquire_lock; then
-        if [ -n "$merge_lock" ]; then
-            printf 'git-worktree-merge: another merge holds %s\n' "$merge_lock" >&2
-        else
-            printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
-        fi
+        printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
         return 1
     fi
     trap release_lock INT TERM HUP EXIT

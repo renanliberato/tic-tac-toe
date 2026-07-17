@@ -35,16 +35,26 @@ afterEach(() => {
 });
 
 describe("git merge lock", () => {
-  it("blocks git-sync before it fetches", () => {
+  it("waits for an existing merge lock before fetching", () => {
     const repository = createRepository();
     const sync = path.join(repository, "git-sync");
     writeFileSync(sync, readFileSync(path.join(repositoryRoot, "git-sync"), "utf8"));
     chmodSync(sync, 0o755);
-    writeFileSync(mergeLockPath(repository), "merge in progress\n");
+    const lock = mergeLockPath(repository);
+    writeFileSync(lock, "merge in progress\n");
 
-    const result = spawnSync("./git-sync", [], { cwd: repository, encoding: "utf8" });
+    // git-sync has no remote in this fixture, so reaching fetch is the expected
+    // failure. The background process releases the lock after the command has
+    // had to wait for it.
+    const result = spawnSync("sh", [
+      "-c",
+      "(sleep 0.2; rm -f -- \"$1\") & exec ./git-sync",
+      "git-lock-test",
+      lock
+    ], { cwd: repository, encoding: "utf8" });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("git-sync: another merge holds");
+    expect(result.stderr).toContain("git-sync: git pull --rebase failed without leaving a conflict to resolve");
+    expect(result.stderr).not.toContain("another merge holds");
   });
 });

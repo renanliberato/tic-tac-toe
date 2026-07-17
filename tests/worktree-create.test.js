@@ -57,39 +57,44 @@ describe("git-worktree-create", () => {
     expect(worktreeCount(repository)).toBe(2);
   });
 
-  it("refuses to create a worktree while a merge holds the lock", () => {
+  it("waits for a merge lock before creating a worktree", () => {
     const repository = createRepository();
     const lock = mergeLockPath(repository);
     writeFileSync(lock, "merge in progress\n");
 
-    const result = spawnSync("./git-worktree-create", [], {
-      cwd: repository,
-      encoding: "utf8"
-    });
+    const result = spawnSync("sh", [
+      "-c",
+      "(sleep 0.2; rm -f -- \"$1\") & exec ./git-worktree-create",
+      "worktree-create-test",
+      lock
+    ], { cwd: repository, encoding: "utf8" });
 
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("git-worktree-create: another merge holds");
-    expect(worktreeCount(repository)).toBe(1);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("another merge holds");
+    expect(worktreeCount(repository)).toBe(2);
   });
 
-  it("uses the common lock when invoked from a linked worktree", () => {
+  it("waits for the common lock when invoked from a linked worktree", () => {
     const repository = createRepository();
     const creation = spawnSync("./git-worktree-create", [], {
       cwd: repository,
       encoding: "utf8"
     });
     const linkedWorktree = creation.stdout.trim();
-    writeFileSync(mergeLockPath(repository), "merge in progress\n");
+    const lock = mergeLockPath(repository);
+    writeFileSync(lock, "merge in progress\n");
 
-    const result = spawnSync("./git-worktree-create", [], {
-      cwd: linkedWorktree,
-      encoding: "utf8"
-    });
+    const result = spawnSync("sh", [
+      "-c",
+      "(sleep 0.2; rm -f -- \"$1\") & exec ./git-worktree-create",
+      "worktree-create-test",
+      lock
+    ], { cwd: linkedWorktree, encoding: "utf8" });
 
     expect(creation.status).toBe(0);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("git-worktree-create: another merge holds");
-    expect(worktreeCount(repository)).toBe(2);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("another merge holds");
+    expect(worktreeCount(repository)).toBe(3);
   });
 
   it("changes the current shell to the new worktree when sourced", () => {
