@@ -186,6 +186,74 @@ async function measureDialogsInBrowser(viewport, executablePath) {
   }
 }
 
+function gameplayCellFixture() {
+  return `<!doctype html>
+    <meta charset="utf-8">
+    <style>${styles}</style>
+    <main class="game">
+      <section id="game-screen" class="screen">
+        <div class="board" aria-label="Tic-Tac-Toe board">
+          <button class="cell" type="button" data-cell="0" data-mark="X" aria-label="Cell 1, X">
+            <svg class="mark-icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+              <path class="mark-icon__stroke" d="M24 24 76 76M76 24 24 76"></path>
+            </svg>
+          </button>
+          <button class="cell" type="button" data-cell="1" aria-label="Cell 2"></button>
+          <button class="cell" type="button" data-cell="2" aria-label="Cell 3"></button>
+          <button class="cell" type="button" data-cell="3" aria-label="Cell 4"></button>
+          <button class="cell" type="button" data-cell="4" aria-label="Cell 5"></button>
+          <button class="cell" type="button" data-cell="5" aria-label="Cell 6"></button>
+          <button class="cell" type="button" data-cell="6" aria-label="Cell 7"></button>
+          <button class="cell" type="button" data-cell="7" aria-label="Cell 8"></button>
+          <button class="cell" type="button" data-cell="8" aria-label="Cell 9"></button>
+        </div>
+      </section>
+    </main>
+    <script>
+      const game = document.querySelector(".game");
+      const scale = Math.min(innerWidth / 1125, innerHeight / 2436);
+      game.style.setProperty("--page-scale", String(scale));
+      const cell = document.querySelector('[data-cell="0"]');
+      const svg = cell.querySelector("svg");
+      const cellBox = cell.getBoundingClientRect();
+      const svgBox = svg.getBoundingClientRect();
+      document.body.dataset.layout = JSON.stringify({
+        viewport: { width: innerWidth, height: innerHeight },
+        scale,
+        cell: {
+          centerX: cellBox.left + cellBox.width / 2,
+          centerY: cellBox.top + cellBox.height / 2
+        },
+        svg: {
+          centerX: svgBox.left + svgBox.width / 2,
+          centerY: svgBox.top + svgBox.height / 2
+        }
+      });
+    </script>`;
+}
+
+async function measureGameplayCellInBrowser(viewport, executablePath) {
+  const directory = mkdtempSync(join(tmpdir(), "gameplay-cell-layout-"));
+  const fixturePath = join(directory, "fixture.html");
+  writeFileSync(fixturePath, gameplayCellFixture());
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-gpu", "--disable-background-networking"]
+    });
+    const page = await browser.newPage();
+    await page.setViewport(viewport);
+    await page.goto(pathToFileURL(fixturePath).href, { waitUntil: "load", timeout: 15000 });
+    return await page.evaluate(() => JSON.parse(document.body.dataset.layout));
+  } finally {
+    await browser?.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 describe("rendered dialog layout", () => {
   it("centers and scales both dialogs at narrow and wide viewports", async () => {
     const executablePath = browserPath();
@@ -304,10 +372,19 @@ describe("scaled game layout", () => {
     expect(styles).not.toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(4\.5rem,\s*5rem\)\)/);
   });
 
-  it("centers SVG marks inside each gameplay cell", () => {
+  it("centers SVG marks inside each gameplay cell", async () => {
     expect(styles).toMatch(/\.game \.cell\s*\{[^}]*display:\s*grid/s);
     expect(styles).toMatch(/\.game \.cell\s*\{[^}]*place-items:\s*center/s);
-  });
+
+    const layout = await measureGameplayCellInBrowser(
+      { width: 375, height: 812 },
+      browserPath()
+    );
+
+    expect(layout.scale).toBeCloseTo(1 / 3, 3);
+    expect(layout.svg.centerX).toBeCloseTo(layout.cell.centerX, 1);
+    expect(layout.svg.centerY).toBeCloseTo(layout.cell.centerY, 1);
+  }, 30000);
 
   it("makes each cell fill its square grid track for a usable hit area", () => {
     expect(styles).toMatch(/\.game \.cell\s*\{[^}]*align-self:\s*stretch/s);
