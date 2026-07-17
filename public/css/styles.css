@@ -62,14 +62,16 @@ body {
 }
 
 .game #home-screen {
+  position: relative;
   box-sizing: border-box;
   display: flex;
   width: min(100%, var(--home-width));
   min-height: var(--home-height);
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  margin: auto;
+  justify-content: space-between;
+  margin: 0 auto;
   padding: 72px 64px;
   border-width: 2px 0;
   border-style: solid;
@@ -81,12 +83,66 @@ body {
 }
 
 .game #home-screen h2 {
-  margin: 0 0 56px;
+  position: relative;
+  z-index: 1;
+  margin: 0;
   padding: 0;
   border: 0;
   font-size: 64px;
   line-height: 1.1;
   letter-spacing: .08em;
+}
+
+.game .home-preview {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  display: grid;
+  width: min(calc(100% - 128px), 560px);
+  aspect-ratio: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px;
+  border: 4px solid currentColor;
+  border-radius: 28px;
+  opacity: .82;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.game .home-preview-cell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  border: 2px solid var(--primary-light, currentColor);
+  border-radius: 16px;
+  color: var(--primary-text, currentColor);
+  font-size: 76px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transform: scale(.88);
+  animation: home-preview-place 7.2s ease-in-out infinite;
+  animation-delay: var(--preview-delay, 0s);
+}
+
+.game .home-preview-cell--x {
+  color: #b42318;
+}
+
+.game .home-preview-cell--o {
+  color: #175cd3;
+}
+
+.game #start-game {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  transform: scale(3);
+  transform-origin: center bottom;
 }
 
 .game #home-screen p {
@@ -264,6 +320,21 @@ body {
   animation: status-bump .28s ease-out;
 }
 
+@keyframes home-preview-place {
+  0%, 4% {
+    opacity: 0;
+    transform: scale(.88);
+  }
+  13%, 64% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  74%, 100% {
+    opacity: 0;
+    transform: scale(.96);
+  }
+}
+
 @keyframes mark-pop {
   0% { transform: scale(.45) rotate(-8deg); opacity: .2; }
   70% { transform: scale(1.15) rotate(2deg); }
@@ -379,12 +450,14 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .game .cell,
-  .game .board {
+  .game .board,
+  .game .home-preview-cell {
     transition: none;
   }
 
   .game .cell--placed,
   .game .cell--winner,
+  .game .home-preview-cell,
   .game .winning-line--active,
   .game .status--updated,
   .game .board--winner,
@@ -397,6 +470,11 @@ body {
   .game .winning-line--active {
     opacity: 1;
     transform: rotate(var(--winning-line-angle, 0rad)) scaleX(1);
+  }
+
+  .game .home-preview-cell {
+    opacity: 1;
+    transform: none;
   }
 }
 
