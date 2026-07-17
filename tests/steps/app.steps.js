@@ -16,11 +16,14 @@ class AppWorld {
     globalThis.window = this.dom.window;
     globalThis.document = this.dom.window.document;
     this.nativeSetTimeout = globalThis.setTimeout;
+    this.nativeRandom = Math.random;
+    Math.random = () => 0;
     globalThis.setTimeout = (callback, delay, ...args) => this.nativeSetTimeout(
       callback,
-      delay === 3000 ? 1 : delay,
+      delay === 500 ? 1 : delay,
       ...args
     );
+
     if (this.initialPlayer) {
       this.dom.window.localStorage.setItem("tic-tac-toe-player", JSON.stringify(this.initialPlayer));
     }
@@ -50,25 +53,9 @@ After(function () {
   this.turnAnnouncementObserver?.disconnect();
   this.dom.window.close();
   globalThis.setTimeout = this.nativeSetTimeout;
+  Math.random = this.nativeRandom;
   delete globalThis.window;
   delete globalThis.document;
-});
-
-
-Given("I have a player profile with {int} coins and match statistics", function (coins) {
-  this.initialPlayer = {
-    player_id: "123e4567-e89b-42d3-a456-426614174000",
-    games_played: 3,
-    moves_played: 12,
-    wins: 2,
-    draws: 0,
-    losses: 1,
-    coin_balance: coins,
-    pending_coins: 0,
-    last_move: null,
-    owned_styles: ["classic"],
-    equipped_style: "classic"
-  };
 });
 
 Given("I open the tic-tac-toe game", async function () {
@@ -80,42 +67,14 @@ When("I click cell {int}", function (number) {
   this.cell(number).click();
 });
 
+When("the computer move completes", async function () {
+  await new Promise((resolve) => this.nativeSetTimeout(resolve, 10));
+});
+
 When("I resize the viewport to {int} by {int}", function (width, height) {
   Object.defineProperty(this.dom.window, "innerWidth", { configurable: true, value: width });
   Object.defineProperty(this.dom.window, "innerHeight", { configurable: true, value: height });
   this.dom.window.dispatchEvent(new this.dom.window.Event("resize"));
-});
-
-When("I open the weekly leaderboard", function () {
-  const button = this.dom.window.document.querySelector("#open-leaderboard");
-  assert.ok(button, "The leaderboard button does not exist");
-  button.click();
-});
-
-When("I return from the weekly leaderboard", function () {
-  const button = this.dom.window.document.querySelector("#leaderboard-back");
-  assert.ok(button, "The leaderboard back button does not exist");
-  button.click();
-});
-
-When("another browser tab changes the leaderboard score to {int}", function (score) {
-  const storage = this.dom.window.localStorage;
-  const oldValue = storage.getItem("tic-tac-toe-player");
-  const player = JSON.parse(oldValue);
-  const newValue = JSON.stringify({ ...player, leaderboard_score: score });
-  storage.setItem("tic-tac-toe-player", newValue);
-  this.dom.window.dispatchEvent(new this.dom.window.StorageEvent("storage", {
-    key: "tic-tac-toe-player",
-    oldValue,
-    newValue,
-    storageArea: storage
-  }));
-});
-
-When("I start matchmaking", function () {
-  const button = this.dom.window.document.querySelector("#start-game");
-  assert.ok(button, "The Start game button does not exist");
-  button.click();
 });
 
 When("I watch the turn announcement", function () {
@@ -128,19 +87,11 @@ When("I watch the turn announcement", function () {
   this.turnAnnouncementObserver.observe(announcement, { childList: true, characterData: true, subtree: true });
 });
 
-When("matchmaking completes", async function () {
-  await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
-});
-
-When("I click the {string} button", async function (label) {
+When("I click the {string} button", function (label) {
   const button = [...this.dom.window.document.querySelectorAll("button")]
     .find((candidate) => candidate.textContent === label);
   assert.ok(button, `A button labelled ${label} does not exist`);
   button.click();
-
-  if (label === "Start game") {
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 3000));
-  }
 });
 
 When("I try to dismiss the result dialog", function () {
@@ -159,63 +110,8 @@ Then("the page scale fits the viewport", function () {
   assert.equal(page.style.getPropertyValue("--page-scale"), String(expectedScale));
 });
 
-Then("the leaderboard screen is visible", function () {
-  assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, false);
-});
-
-Then("the leaderboard screen is hidden", function () {
-  assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, true);
-});
-
-Then("the leaderboard shows its position, player, and score columns", function () {
-  const columns = [...this.dom.window.document.querySelectorAll(
-    "#leaderboard-screen [role=columnheader]"
-  )].map((column) => column.textContent);
-  assert.deepEqual(columns, ["Position", "Player", "Score"]);
-});
-
-Then("the leaderboard shows the local player with score {int}", function (score) {
-  const stored = JSON.parse(this.dom.window.localStorage.getItem("tic-tac-toe-player"));
-  const row = this.dom.window.document.querySelector("#leaderboard-local-row");
-  assert.ok(row, "The local leaderboard row does not exist");
-  assert.equal(row.querySelector(".leaderboard-row__player").textContent, `${stored.player_name} (You)`);
-  assert.equal(row.querySelector(".leaderboard-row__score").textContent, String(score));
-});
-
-Then("the leaderboard shows ranked opponents", function () {
-  const opponents = [...this.dom.window.document.querySelectorAll(
-    "#leaderboard-list .leaderboard-row:not(#leaderboard-local-row)"
-  )];
-  assert.ok(opponents.length > 0, "No ranked opponents are shown");
-  assert.match(opponents[0].querySelector(".leaderboard-row__position").textContent, /^\d+$/);
-});
-
-Then("the leaderboard button has focus", function () {
-  assert.equal(this.dom.window.document.activeElement.id, "open-leaderboard");
-});
-
-Then("the matchmaking dialog is visible", function () {
-  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, true);
-});
-
-Then("the matchmaking dialog is hidden", function () {
-  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, false);
-});
-
 Then("the home screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, false);
-});
-
-Then("the home title is visible", function () {
-  const home = this.dom.window.document.querySelector("#home-screen");
-  const title = this.dom.window.document.querySelector("#home-title");
-
-  assert.ok(title, "The home title does not exist");
-  assert.equal(home.contains(title), true);
-  assert.equal(title.textContent, "TIC TAC TOE");
-  assert.equal(title.hidden, false);
-  assert.notEqual(this.dom.window.getComputedStyle(title).display, "none");
-  assert.notEqual(this.dom.window.getComputedStyle(title).visibility, "hidden");
 });
 
 Then("the home screen is hidden", function () {
@@ -240,13 +136,11 @@ Then("the local player card shows a friendly name", function () {
   assert.notEqual(name, "You");
 });
 
-Then("the opponent card shows a friendly name", function () {
-  const card = this.dom.window.document.querySelector("[data-player=\"opponent\"]");
-  const name = this.dom.window.document.querySelector("#opponent-name").textContent.trim();
-
-  assert.ok(card, "The opponent card does not exist");
-  assert.equal(card.hidden, false);
-  assert.match(name, /^[A-Za-z]+$/);
+Then("the opponent card shows the Computer", function () {
+  const documentRef = this.dom.window.document;
+  assert.equal(documentRef.querySelector("#opponent-name").textContent, "Computer");
+  assert.equal(documentRef.querySelector("[data-player=\"opponent\"] .player-role").textContent, "AI Opponent");
+  assert.equal(documentRef.querySelector("[data-player=\"opponent\"]").hidden, false);
 });
 
 Then("the first board cell has focus", function () {
@@ -277,7 +171,7 @@ Then("the {word} player score is {int}", function (mark, expected) {
   assert.equal(this.dom.window.document.querySelector(id).textContent, String(expected));
   assert.equal(
     this.dom.window.document.querySelector(id).getAttribute("aria-label"),
-    `${mark === "X" ? "Your" : "Opponent"} score: ${expected}`
+    `${mark === "X" ? "Your" : "Computer"} score: ${expected}`
   );
 });
 
@@ -401,6 +295,83 @@ Then("all board cells are disabled", function () {
   assert.ok(this.cells().every((cell) => cell.disabled));
 });
 
+
+Given("I have a player profile with {int} coins and match statistics", function (coins) {
+  this.initialPlayer = {
+    player_id: "123e4567-e89b-42d3-a456-426614174000",
+    games_played: 3,
+    moves_played: 12,
+    wins: 2,
+    draws: 0,
+    losses: 1,
+    coin_balance: coins,
+    pending_coins: 0,
+    last_move: null,
+    owned_styles: ["classic"],
+    equipped_style: "classic"
+  };
+});
+
+When("I open the weekly leaderboard", function () {
+  const button = this.dom.window.document.querySelector("#open-leaderboard");
+  assert.ok(button, "The leaderboard button does not exist");
+  button.click();
+});
+
+When("I return from the weekly leaderboard", function () {
+  const button = this.dom.window.document.querySelector("#leaderboard-back");
+  assert.ok(button, "The leaderboard back button does not exist");
+  button.click();
+});
+
+When("another browser tab changes the leaderboard score to {int}", function (score) {
+  const storage = this.dom.window.localStorage;
+  const oldValue = storage.getItem("tic-tac-toe-player");
+  const player = JSON.parse(oldValue);
+  const newValue = JSON.stringify({ ...player, leaderboard_score: score });
+  storage.setItem("tic-tac-toe-player", newValue);
+  this.dom.window.dispatchEvent(new this.dom.window.StorageEvent("storage", {
+    key: "tic-tac-toe-player",
+    oldValue,
+    newValue,
+    storageArea: storage
+  }));
+});
+
+Then("the leaderboard screen is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, false);
+});
+
+Then("the leaderboard screen is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, true);
+});
+
+Then("the leaderboard shows its position, player, and score columns", function () {
+  const columns = [...this.dom.window.document.querySelectorAll(
+    "#leaderboard-screen [role=columnheader]"
+  )].map((column) => column.textContent);
+  assert.deepEqual(columns, ["Position", "Player", "Score"]);
+});
+
+Then("the leaderboard shows the local player with score {int}", function (score) {
+  const stored = JSON.parse(this.dom.window.localStorage.getItem("tic-tac-toe-player"));
+  const row = this.dom.window.document.querySelector("#leaderboard-local-row");
+  assert.ok(row, "The local leaderboard row does not exist");
+  assert.equal(row.querySelector(".leaderboard-row__player").textContent, `${stored.player_name} (You)`);
+  assert.equal(row.querySelector(".leaderboard-row__score").textContent, String(score));
+});
+
+Then("the leaderboard shows ranked opponents", function () {
+  const opponents = [...this.dom.window.document.querySelectorAll(
+    "#leaderboard-list .leaderboard-row:not(#leaderboard-local-row)"
+  )];
+  assert.ok(opponents.length > 0, "No ranked opponents are shown");
+  assert.match(opponents[0].querySelector(".leaderboard-row__position").textContent, /^\d+$/);
+});
+
+Then("the leaderboard button has focus", function () {
+  assert.equal(this.dom.window.document.activeElement.id, "open-leaderboard");
+});
 
 When("I open my profile", function () {
   this.dom.window.document.querySelector("#open-profile").click();

@@ -32,18 +32,15 @@ class FakeView {
 
   bindDialogGuards() {}
 
-  render(state, gameStarted, winningLine, player, opponent, matchScore) {
+  render(state, gameStarted, winningLine, player, opponent, matchScore, aiPending) {
     this.events.push("render");
-    this.rendered.push({ state, gameStarted, winningLine, player, opponent, matchScore, gameVisible: this.gameVisible });
+    this.rendered.push({ state, gameStarted, winningLine, player, opponent, matchScore, aiPending, gameVisible: this.gameVisible });
   }
 
-  showMatchmaking() { this.gameVisible = false; this.actions.push("showMatchmaking"); }
   showGame() { this.gameVisible = true; this.actions.push("showGame"); this.events.push("showGame"); }
   focusFirstCell() { this.events.push("focusFirstCell"); }
   showHome() { this.gameVisible = false; this.actions.push("showHome"); }
   closeResultDialog() { this.actions.push("closeResultDialog"); }
-  openMatchmakingDialog() { this.actions.push("openMatchmakingDialog"); }
-  closeMatchmakingDialog() { this.actions.push("closeMatchmakingDialog"); }
   resetFeedback() { this.actions.push("resetFeedback"); }
   replayMove(index) { this.actions.push(["replayMove", index]); }
   animateWinningLine(line) {
@@ -70,7 +67,6 @@ function createViewDocument() {
         <p id="status" class="status"></p>
         <div class="board">${cells}<span data-winning-line hidden></span></div>
       </section>
-      <dialog id="matchmaking-dialog"></dialog>
       <dialog id="result-dialog">
         <h2 id="result-message"></h2>
         <p id="result-detail"></p>
@@ -99,108 +95,126 @@ describe("MVC game architecture", () => {
     expect(states).toHaveLength(2);
   });
 
-  it("exposes the game screen before rendering the initial turn announcement", () => {
+  it("starts immediately with a fixed Computer opponent", () => {
     const model = new GameModel();
     const view = new FakeView();
-    let matchmakingCallback;
+    const timer = { setTimeout() { throw new Error("start must not schedule matchmaking"); }, clearTimeout() {} };
+    new GameController(model, view, timer);
+
+    view.startHandler();
+
+    expect(view.gameVisible).toBe(true);
+    expect(view.rendered.at(-1).gameStarted).toBe(true);
+    expect(view.rendered.at(-1).opponent).toMatchObject({
+      opponent_name: "Computer", opponent_role: "AI Opponent"
+    });
+    expect(model.getState()).toMatchObject({ player: "X", board: Array(9).fill(null) });
+    expect(view.events.at(-1)).toBe("focusFirstCell");
+  });
+
+  it("locks input and chooses the first and last free cells using injected randomness", () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    const jobs = new Map();
+    let id = 0;
     const timer = {
-      setTimeout(callback) {
-        matchmakingCallback = callback;
-        return 1;
-      },
+      setTimeout(callback, delay) { jobs.set(++id, { callback, delay }); return id; },
+      clearTimeout(timerId) { jobs.delete(timerId); }
+    };
+    const values = [0, .999999];
+    const controller = new GameController(model, view, timer, () => values.shift());
+    controller.startGame();
+
+    controller.play(4);
+    controller.play(5);
+    expect(model.getState().board.filter(Boolean)).toEqual(["X"]);
+    expect(view.rendered.at(-1).aiPending).toBe(true);
+    expect([...jobs.values()][0].delay).toBe(500);
+    [...jobs.values()][0].callback();
+    expect(model.getState().board[0]).toBe("O");
+
+    controller.play(1);
+    [...jobs.values()].at(-1).callback();
+    expect(model.getState().board[8]).toBe("O");
+    expect(controller.player.moves_played).toBe(2);
+    expect(controller.player.last_move).toEqual({ cell: 1, mark: "X" });
+  });
+
+  it("does not schedule a computer move after a terminal human move", () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    const jobs = [];
+    const timer = {
+      setTimeout(callback) { jobs.push(callback); return jobs.length; },
       clearTimeout() {}
     };
-
-    new GameController(model, view, timer);
-    view.startHandler();
-    matchmakingCallback();
-
-    const gameRenders = view.rendered.filter(({ gameStarted }) => gameStarted);
-    expect(gameRenders).toHaveLength(1);
-    expect(gameRenders[0].gameVisible).toBe(true);
-    expect(view.events.slice(-3)).toEqual(["showGame", "render", "focusFirstCell"]);
-  });
-
-  it("scores a non-final win and automatically starts the next X round", async () => {
-    const model = new GameModel();
-    const view = new FakeView();
-    const controller = new GameController(model, view, {
-      setTimeout: () => 1,
-      clearTimeout: () => {}
-    });
-
+    const controller = new GameController(model, view, timer, () => .999999);
     controller.startGame();
-    for (const index of [0, 3, 1, 4, 2]) controller.play(index);
+    const initialMoves = controller.player.moves_played;
 
-    expect(view.winningLines).toEqual([[0, 1, 2]]);
-    expect(view.rendered.at(-1).matchScore).toEqual({ X: 1, O: 0 });
-    expect(view.resultStates).toHaveLength(0);
-    await Promise.resolve();
-    expect(model.getState().board).toEqual(Array(9).fill(null));
-    expect(model.getState().player).toBe("X");
-    expect(view.events).toContain("focusFirstCell");
-    expect(view.rendered.at(-1).matchScore).toEqual({ X: 1, O: 0 });
+    controller.play(0); jobs.shift()();
+    controller.play(1); jobs.shift()();
+    controller.play(2);
+
+    expect(model.getState().winner).toBe("X");
+    expect(jobs).toHaveLength(0);
+    expect(controller.matchScore).toEqual({ X: 1, O: 0 });
+    expect(controller.player.moves_played - initialMoves).toBe(3);
   });
 
-  it("automatically starts a fresh round after a draw without changing score", () => {
+  it("uses random choices without blocking a threat and records an AI win", () => {
     const model = new GameModel();
     const view = new FakeView();
-    const controller = new GameController(model, view, {
-      setTimeout: () => 1,
-      clearTimeout: () => {}
-    });
-
-    controller.startGame();
-    for (const index of [0, 1, 2, 4, 3, 5, 7, 6, 8]) controller.play(index);
-
-    expect(view.resultStates).toHaveLength(0);
-    expect(model.getState().board).toEqual(Array(9).fill(null));
-    expect(model.getState().player).toBe("X");
-    expect(view.rendered.at(-1).matchScore).toEqual({ X: 0, O: 0 });
-  });
-
-  it("shows the result only when a player reaches three points and keeps O scoring separate", async () => {
-    const model = new GameModel();
-    const view = new FakeView();
-    const controller = new GameController(model, view, {
-      setTimeout: () => 1,
-      clearTimeout: () => {}
-    });
-
-    controller.startGame();
-    for (let round = 0; round < 3; round += 1) {
-      for (const index of [0, 1, 2, 4, 3, 7]) controller.play(index);
-      await Promise.resolve();
-    }
-
-    expect(view.rendered.at(-1).matchScore).toEqual({ X: 0, O: 3 });
-    expect(view.resultStates).toHaveLength(1);
-    expect(view.resultStates[0].winner).toBe("O");
-    expect(model.getState().board).not.toEqual(Array(9).fill(null));
-  });
-
-  it("ignores a completed-round animation callback after leaving the match", async () => {
-    const model = new GameModel();
-    const view = new FakeView();
-    let resolveAnimation;
-    view.animateWinningLine = (line) => {
-      view.winningLines.push(line);
-      return new Promise((resolve) => { resolveAnimation = resolve; });
+    const jobs = [];
+    const timer = {
+      setTimeout(callback) { jobs.push(callback); return jobs.length; },
+      clearTimeout() {}
     };
-    const controller = new GameController(model, view, {
-      setTimeout: () => 1,
-      clearTimeout: () => {}
-    });
-
+    const values = [.999999, .2];
+    const controller = new GameController(model, view, timer, () => values.shift() ?? 0);
     controller.startGame();
-    for (const index of [0, 3, 1, 4, 2]) controller.play(index);
-    controller.showHome();
-    resolveAnimation();
-    await Promise.resolve();
+    controller.play(0); jobs.shift()(); // O randomly takes 8.
+    controller.play(1); jobs.shift()(); // O randomly takes 3, not the blocking 2.
+    expect(model.getState().board.slice(0, 4)).toEqual(["X", "X", null, "O"]);
 
-    expect(view.resultStates).toHaveLength(0);
+    // A separate random-first sequence demonstrates terminal AI result handling.
+    const winningModel = new GameModel();
+    const winningView = new FakeView();
+    const winningJobs = [];
+    const winningTimer = {
+      setTimeout(callback) { winningJobs.push(callback); return winningJobs.length; },
+      clearTimeout() {}
+    };
+    const winningController = new GameController(winningModel, winningView, winningTimer, () => 0);
+    winningController.startGame();
+    for (const humanCell of [8, 7, 5]) {
+      winningController.play(humanCell);
+      winningJobs.shift()();
+    }
+    expect(winningModel.getState().winner).toBe("O");
+    expect(winningController.matchScore).toEqual({ X: 0, O: 1 });
+    expect(winningController.player.losses).toBeGreaterThan(0);
+    expect(winningController.player.last_move).toEqual({ cell: 5, mark: "X" });
+  });
+
+  it("cancels a pending computer move when returning home", () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    let callback;
+    let cleared = false;
+    const timer = {
+      setTimeout(next) { callback = next; return 7; },
+      clearTimeout(id) { if (id === 7) cleared = true; }
+    };
+    const controller = new GameController(model, view, timer, () => 0);
+    controller.startGame();
+    controller.play(4);
+    controller.showHome();
+    callback();
+
+    expect(cleared).toBe(true);
     expect(model.getState().board).toEqual(Array(9).fill(null));
-    expect(view.actions).not.toContain("focusFirstCell");
+    expect(controller.matchScore).toEqual({ X: 0, O: 0 });
   });
 
   it("renders state and winning-line geometry in the DOM view", () => {
@@ -233,7 +247,7 @@ describe("MVC game architecture", () => {
     expect(documentRef.querySelector("#player-score").textContent).toBe("0");
     expect(documentRef.querySelector("#opponent-score").textContent).toBe("0");
     expect(documentRef.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 0");
-    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 0");
+    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Computer score: 0");
     expect(documentRef.querySelector("[data-player=\"opponent\"]").hidden).toBe(false);
     expect([...view.cells].map((cell) => cell.textContent)).toEqual([
       "X", "X", "X", "O", "", "", "", "", ""
@@ -271,7 +285,7 @@ describe("MVC game architecture", () => {
     expect(documentRef.querySelector("#player-score").textContent).toBe("2");
     expect(documentRef.querySelector("#opponent-score").textContent).toBe("1");
     expect(documentRef.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 2");
-    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 1");
+    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Computer score: 1");
     expect(documentRef.querySelector("[data-player=\"local\"]").dataset.score).toBe("2");
     expect(documentRef.querySelector("[data-player=\"opponent\"]").dataset.score).toBe("1");
 
@@ -281,7 +295,7 @@ describe("MVC game architecture", () => {
     expect(view.cells[0].getAttribute("aria-label")).toBe("Cell 1, X");
     expect(documentRef.querySelector("#status").textContent).toBe("");
     const turnAnnouncement = documentRef.querySelector("#turn-announcement");
-    expect(turnAnnouncement.textContent).toBe("Player X won!");
+    expect(turnAnnouncement.textContent).toBe("You won!");
 
     const winningLine = documentRef.querySelector("[data-winning-line]");
     expect(winningLine.dataset.line).toBe("0,1,2");
@@ -317,14 +331,14 @@ describe("MVC game architecture", () => {
     expect(documentRef.querySelector("#game-screen").getAttribute("aria-labelledby")).toBe("turn-announcement");
     expect(turnAnnouncement.getAttribute("role")).toBe("status");
     expect(turnAnnouncement.getAttribute("aria-live")).toBe("polite");
-    expect(turnAnnouncement.textContent).toBe("Player X's turn");
+    expect(turnAnnouncement.textContent).toBe("Your turn");
     expect(localCard.classList.contains("player-card--active")).toBe(true);
     expect(localCard.getAttribute("aria-current")).toBe("true");
     expect(opponentCard.classList.contains("player-card--active")).toBe(false);
 
     view.render({ board: ["X", null, null, null, null, null, null, null, null], player: "O", winner: null, draw: false }, true, [],
       { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
-    expect(turnAnnouncement.textContent).toBe("Player O's turn");
+    expect(turnAnnouncement.textContent).toBe("Computer is thinking…");
     expect(localCard.classList.contains("player-card--active")).toBe(false);
     expect(localCard.hasAttribute("aria-current")).toBe(false);
     expect(opponentCard.classList.contains("player-card--active")).toBe(true);
@@ -349,7 +363,7 @@ describe("MVC game architecture", () => {
 
     view.openResultDialog({ winner: "O", draw: false });
     expect(resultDialog.open).toBe(true);
-    expect(documentRef.querySelector("#result-message").textContent).toBe("O Won");
+    expect(documentRef.querySelector("#result-message").textContent).toBe("Computer won!");
     expect(documentRef.querySelector("#result-detail").textContent).toBe("Three in a row!");
   });
 });

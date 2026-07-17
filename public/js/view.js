@@ -159,7 +159,7 @@ export class GameView {
     this.preventDialogDismissal(this.resultDialog);
   }
 
-  render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null) {
+  render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null, aiPending = false) {
     if (!this.coinPresentation) this.renderCoinBalance(player?.coin_balance ?? 0);
     this.applyBoardStyle(player?.equipped_style);
     this.renderPlayers(player, opponent, state, gameStarted, matchScore);
@@ -172,15 +172,18 @@ export class GameView {
       cell.setAttribute("aria-label", mark
         ? `Cell ${index + 1}, ${mark}`
         : `Cell ${index + 1}`);
-      cell.disabled = !gameStarted || Boolean(mark) || Boolean(state.winner) || state.draw;
+      cell.disabled = !gameStarted || state.player !== "X" || aiPending
+        || Boolean(mark) || Boolean(state.winner) || state.draw;
     });
 
     const feedback = state.draw ? "It\'s a draw!" : "";
     this.status.textContent = feedback;
     if (this.turnAnnouncement) {
       this.turnAnnouncement.textContent = feedback || (state.winner
-        ? `Player ${state.winner} won!`
-        : (gameStarted ? `Player ${state.player}\'s turn` : ""));
+        ? (state.winner === "X" ? "You won!" : "Computer won!")
+        : (gameStarted ? (state.player === "X" && !aiPending
+          ? "Your turn"
+          : "Computer is thinking…") : ""));
     }
     this.status.classList.toggle("status--winner", Boolean(state.winner));
     this.status.classList.toggle("status--draw", state.draw);
@@ -391,7 +394,7 @@ export class GameView {
     }
     if (this.opponentScore) {
       this.opponentScore.textContent = opponentScore;
-      this.opponentScore.setAttribute("aria-label", `Opponent score: ${opponentScore}`);
+      this.opponentScore.setAttribute("aria-label", `Computer score: ${opponentScore}`);
     }
     if (this.playerPanel) this.playerPanel.dataset.score = localScore;
     if (this.opponentPanel) this.opponentPanel.dataset.score = opponentScore;
@@ -828,7 +831,9 @@ export class GameView {
   openResultDialog(state) {
     if ((!state.winner && !state.draw) || !this.resultDialog || this.resultDialog.open) return;
 
-    this.resultMessage.textContent = state.winner ? `${state.winner} Won` : "Draw";
+    this.resultMessage.textContent = state.winner
+      ? (state.winner === "X" ? "You won!" : "Computer won!")
+      : "Draw";
     if (this.resultDetail) {
       this.resultDetail.textContent = state.winner
         ? "Three in a row!"
