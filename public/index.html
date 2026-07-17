@@ -31,7 +31,7 @@
             <button id="start-game" type="button" aria-label="Play">Start game</button>
         </section>
 
-        <section id="game-screen" class="screen" aria-labelledby="status" hidden>
+        <section id="game-screen" class="screen" aria-labelledby="turn-announcement" hidden>
             <div class="players" aria-label="Players">
                 <div class="player-card" data-player="local" data-mark="X">
                     <span class="player-role">You</span>
@@ -42,7 +42,8 @@
                     <strong id="opponent-name"></strong>
                 </div>
             </div>
-            <p id="status" class="status" role="status"></p>
+            <p id="turn-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+            <p id="status" class="status"></p>
             <div class="board" aria-label="Tic-Tac-Toe board">
                 <button class="cell" type="button" data-cell="0" aria-label="Cell 1"></button>
                 <button class="cell" type="button" data-cell="1" aria-label="Cell 2"></button>

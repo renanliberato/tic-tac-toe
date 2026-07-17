@@ -27,6 +27,7 @@ export class GameView {
     this.cells = [...documentRef.querySelectorAll("[data-cell]")];
     this.board = documentRef.querySelector(".board");
     this.status = documentRef.querySelector("#status");
+    this.turnAnnouncement = documentRef.querySelector("#turn-announcement");
     this.playerPanel = documentRef.querySelector("[data-player=\"local\"]");
     this.playerName = documentRef.querySelector("#player-name");
     this.opponentName = documentRef.querySelector("#opponent-name");
@@ -89,11 +90,15 @@ export class GameView {
       cell.disabled = !gameStarted || Boolean(mark) || Boolean(state.winner) || state.draw;
     });
 
-    this.status.textContent = state.winner
+    const feedback = state.winner
       ? `Player ${state.winner} wins!`
       : state.draw
         ? "It\'s a draw!"
         : "";
+    this.status.textContent = feedback;
+    if (this.turnAnnouncement) {
+      this.turnAnnouncement.textContent = feedback || (gameStarted ? `Player ${state.player}\'s turn` : "");
+    }
     this.status.classList.toggle("status--winner", Boolean(state.winner));
     this.status.classList.toggle("status--draw", state.draw);
     this.board?.classList.toggle("board--winner", Boolean(state.winner));

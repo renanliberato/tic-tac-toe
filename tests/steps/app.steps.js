@@ -164,6 +164,10 @@ Then("the status says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#status").textContent, expected);
 });
 
+Then("the turn announcement says {string}", function (expected) {
+  assert.equal(this.dom.window.document.querySelector("#turn-announcement").textContent, expected);
+});
+
 Then("cell {int} contains {string}", function (number, expected) {
   assert.equal(this.cell(number).textContent, expected);
 });

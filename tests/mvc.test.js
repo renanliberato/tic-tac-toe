@@ -57,11 +57,12 @@ function createViewDocument() {
   return new JSDOM(`
     <main class="game">
       <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
-      <section id="game-screen" hidden>
+      <section id="game-screen" aria-labelledby="turn-announcement" hidden>
         <div class="players">
           <div class="player-card" data-player="local"><strong id="player-name"></strong></div>
           <div class="player-card" data-player="opponent" hidden><strong id="opponent-name"></strong></div>
         </div>
+        <p id="turn-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
         <p id="status" class="status"></p>
         <div class="board">${cells}<span data-winning-line hidden></span></div>
       </section>
@@ -194,12 +195,18 @@ describe("MVC game architecture", () => {
     expect(view.cells[4].disabled).toBe(true);
     expect(view.cells[0].getAttribute("aria-label")).toBe("Cell 1, X");
     expect(documentRef.querySelector("#status").textContent).toBe("Player X wins!");
+    const turnAnnouncement = documentRef.querySelector("#turn-announcement");
+    expect(turnAnnouncement.textContent).toBe("Player X wins!");
 
     const winningLine = documentRef.querySelector("[data-winning-line]");
     expect(winningLine.dataset.line).toBe("0,1,2");
     expect(winningLine.style.left).toBe("50px");
     expect(winningLine.style.width).toBe("240px");
     expect(winningLine.style.getPropertyValue("--winning-line-angle")).toBe("0rad");
+
+    view.render({ board: ["X", "O", "X", "X", "O", "O", "O", "X", "X"], player: "O", winner: null, draw: true }, true, [],
+      { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
+    expect(turnAnnouncement.textContent).toBe("It's a draw!");
   });
 
   it("uses player-card borders to indicate the active turn", () => {
@@ -212,13 +219,18 @@ describe("MVC game architecture", () => {
     const emptyBoard = Array(9).fill(null);
     view.render({ board: emptyBoard, player: "X", winner: null, draw: false }, true, [],
       { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
-    expect(documentRef.querySelector("#status").textContent).toBe("");
+    const turnAnnouncement = documentRef.querySelector("#turn-announcement");
+    expect(documentRef.querySelector("#game-screen").getAttribute("aria-labelledby")).toBe("turn-announcement");
+    expect(turnAnnouncement.getAttribute("role")).toBe("status");
+    expect(turnAnnouncement.getAttribute("aria-live")).toBe("polite");
+    expect(turnAnnouncement.textContent).toBe("Player X's turn");
     expect(localCard.classList.contains("player-card--active")).toBe(true);
     expect(localCard.getAttribute("aria-current")).toBe("true");
     expect(opponentCard.classList.contains("player-card--active")).toBe(false);
 
     view.render({ board: ["X", null, null, null, null, null, null, null, null], player: "O", winner: null, draw: false }, true, [],
       { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
+    expect(turnAnnouncement.textContent).toBe("Player O's turn");
     expect(localCard.classList.contains("player-card--active")).toBe(false);
     expect(localCard.hasAttribute("aria-current")).toBe(false);
     expect(opponentCard.classList.contains("player-card--active")).toBe(true);
