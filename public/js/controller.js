@@ -8,6 +8,11 @@ import {
 } from "./player.js";
 
 const MATCHMAKING_DURATION = 3000;
+const MATCH_POINTS_TO_WIN = 3;
+
+function createMatchScore() {
+  return { X: 0, O: 0 };
+}
 
 /**
  * Coordinates user actions and application state without directly touching
@@ -22,7 +27,9 @@ export class GameController {
     this.matchmakingTimer = null;
     this.player = getOrCreatePlayer();
     this.opponent = null;
+    this.matchScore = createMatchScore();
     this.resultRecorded = false;
+    this.roundId = 0;
 
     this.model.subscribe(() => this.render());
     this.bindViewEvents();
@@ -41,7 +48,14 @@ export class GameController {
   render() {
     const state = this.model.getState();
     const winningLine = state.winner ? getWinningLine(state.board) || [] : [];
-    this.view.render(state, this.gameStarted, winningLine, this.player, this.opponent);
+    this.view.render(
+      state,
+      this.gameStarted,
+      winningLine,
+      this.player,
+      this.opponent,
+      this.matchScore
+    );
   }
 
   play(index) {
@@ -49,12 +63,22 @@ export class GameController {
 
     this.player = updatePlayerAfterMove(this.player, this.model.getState(), index);
     const state = this.model.getState();
+    const completedRoundId = this.roundId;
     this.recordResult(state);
     this.view.replayMove(index);
+
     if (state.winner) {
-      this.view.animateWinningLine(getWinningLine(state.board)).then(() => this.showResult());
+      const finalRound = this.matchScore[state.winner] >= MATCH_POINTS_TO_WIN;
+      this.view.animateWinningLine(getWinningLine(state.board)).then(() => {
+        if (!this.isCurrentRound(completedRoundId)) return;
+        if (finalRound) {
+          this.showResult();
+        } else {
+          this.startNextRound(completedRoundId);
+        }
+      });
     } else if (state.draw) {
-      this.showResult();
+      this.startNextRound(completedRoundId);
     }
   }
 
@@ -62,7 +86,11 @@ export class GameController {
     if (this.matchmakingTimer !== null) return;
 
     this.view.closeResultDialog();
+    this.view.resetFeedback();
     this.opponent = createOpponent();
+    this.matchScore = createMatchScore();
+    this.resultRecorded = false;
+    this.roundId += 1;
     this.gameStarted = false;
     this.model.reset();
     this.view.showMatchmaking();
@@ -80,7 +108,9 @@ export class GameController {
     this.view.closeResultDialog();
     this.view.resetFeedback();
     this.gameStarted = true;
+    this.matchScore = createMatchScore();
     this.resultRecorded = false;
+    this.roundId += 1;
     // startGame can also be called directly by an integration, so keep every
     // actual game covered even when matchmaking was skipped.
     this.opponent ||= createOpponent();
@@ -90,12 +120,24 @@ export class GameController {
     this.view.focusFirstCell();
   }
 
+  startNextRound(completedRoundId) {
+    if (!this.isCurrentRound(completedRoundId) || this.isMatchOver()) return;
+
+    this.view.resetFeedback();
+    this.resultRecorded = false;
+    this.roundId += 1;
+    this.player = startPlayerGame(this.player);
+    this.model.reset();
+    this.view.focusFirstCell();
+  }
+
   showHome() {
     this.stopMatchmaking();
+    this.view.resetFeedback();
     this.opponent = null;
     this.view.closeResultDialog();
-    this.view.resetFeedback();
     this.gameStarted = false;
+    this.roundId += 1;
     this.model.reset();
     this.view.showHome();
   }
@@ -112,7 +154,22 @@ export class GameController {
     if (this.resultRecorded || (!state.winner && !state.draw)) return;
 
     this.player = updatePlayerAfterResult(this.player, state);
+    if (state.winner) {
+      this.matchScore = {
+        ...this.matchScore,
+        [state.winner]: this.matchScore[state.winner] + 1
+      };
+    }
     this.resultRecorded = true;
+    this.render();
+  }
+
+  isCurrentRound(roundId) {
+    return this.gameStarted && this.roundId === roundId;
+  }
+
+  isMatchOver() {
+    return Object.values(this.matchScore).some((score) => score >= MATCH_POINTS_TO_WIN);
   }
 
   showResult() {
@@ -120,4 +177,4 @@ export class GameController {
   }
 }
 
-export { MATCHMAKING_DURATION };
+export { MATCHMAKING_DURATION, MATCH_POINTS_TO_WIN, createMatchScore };

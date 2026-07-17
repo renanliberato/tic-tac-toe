@@ -34,12 +34,18 @@
         <section id="game-screen" class="screen" aria-labelledby="turn-announcement" hidden>
             <div class="players" aria-label="Players">
                 <div class="player-card" data-player="local" data-mark="X">
-                    <span class="player-role">You</span>
-                    <strong id="player-name">You</strong>
+                    <div class="player-card__identity">
+                        <span class="player-role">You</span>
+                        <strong id="player-name">You</strong>
+                    </div>
+                    <strong id="player-score" class="player-score" aria-label="Your score: 0">0</strong>
                 </div>
                 <div class="player-card" data-player="opponent" data-mark="O" hidden>
-                    <span class="player-role">Opponent</span>
-                    <strong id="opponent-name"></strong>
+                    <strong id="opponent-score" class="player-score" aria-label="Opponent score: 0">0</strong>
+                    <div class="player-card__identity">
+                        <span class="player-role">Opponent</span>
+                        <strong id="opponent-name"></strong>
+                    </div>
                 </div>
             </div>
             <p id="turn-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>

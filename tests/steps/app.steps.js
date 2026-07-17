@@ -179,6 +179,19 @@ Then("the status says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#status").textContent, expected);
 });
 
+Then("the {word} player score is {int}", function (mark, expected) {
+  const id = mark === "X" ? "#player-score" : "#opponent-score";
+  assert.equal(this.dom.window.document.querySelector(id).textContent, String(expected));
+  assert.equal(
+    this.dom.window.document.querySelector(id).getAttribute("aria-label"),
+    `${mark === "X" ? "Your" : "Opponent"} score: ${expected}`
+  );
+});
+
+When("the winning-line animation completes", async function () {
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 700));
+});
+
 Then("the turn announcement says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#turn-announcement").textContent, expected);
 });

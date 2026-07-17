@@ -66,8 +66,12 @@ Feature: Playing a game of tic-tac-toe
     And the result dialog is hidden
     And the winning line is shown for cells 1, 2, and 3
     And cell 1 has the accessibility label "Cell 1, X"
-    And the result dialog detail says "Three in a row!"
+    And the X player score is 1
     And all board cells are disabled
+    When the winning-line animation completes
+    Then all board cells are empty
+    And the X player score is 1
+    And the turn announcement says "Player X's turn"
 
   Scenario: A completed win persists player statistics
     Given I open the tic-tac-toe game
@@ -83,17 +87,17 @@ Feature: Playing a game of tic-tac-toe
       | wins         | 1 |
       | draws        | 0 |
       | losses       | 0 |
-    And the result dialog says "X Won"
-    And player statistics include:
-      | games_played | 1 |
+    And the X player score is 1
+    When the winning-line animation completes
+    Then player statistics include:
+      | games_played | 2 |
       | moves_played | 5 |
       | wins         | 1 |
       | draws        | 0 |
       | losses       | 0 |
-      | last_move    | {"cell":2,"mark":"X"} |
 
 
-  Scenario: Results are recorded once for each new game
+  Scenario: Results are recorded once for each round and a new match resets its score
     Given I open the tic-tac-toe game
     When I click the "Start game" button
     And I click cell 1
@@ -101,21 +105,31 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 2
     And I click cell 5
     And I click cell 3
-    Then the result dialog says "X Won"
-    When I click the "Continue" button
-    And I click the "Start game" button
+    When the winning-line animation completes
     And I click cell 1
     And I click cell 4
     And I click cell 2
     And I click cell 5
     And I click cell 3
-    Then player statistics include:
-      | games_played | 2 |
-      | moves_played | 10 |
-      | wins         | 2 |
+    When the winning-line animation completes
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    Then the result dialog says "X Won"
+    And the X player score is 3
+    And player statistics include:
+      | games_played | 3 |
+      | moves_played | 15 |
+      | wins         | 3 |
       | draws        | 0 |
       | losses       | 0 |
       | last_move    | {"cell":2,"mark":"X"} |
+    When I click the "Continue" button
+    And I click the "Start game" button
+    Then the X player score is 0
+    And the O player score is 0
 
   Scenario: An opponent win persists a player loss
     Given I open the tic-tac-toe game
@@ -126,14 +140,16 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 4
     And I click cell 5
     And I click cell 7
-    Then the result dialog says "O Won"
+    Then the O player score is 1
+    When the winning-line animation completes
+    Then all board cells are empty
+    And the O player score is 1
     And player statistics include:
-      | games_played | 1 |
+      | games_played | 2 |
       | moves_played | 6 |
       | wins         | 0 |
       | draws        | 0 |
       | losses       | 1 |
-      | last_move    | {"cell":6,"mark":"O"} |
 
   Scenario: An occupied cell cannot be overwritten
     Given I open the tic-tac-toe game
@@ -144,9 +160,21 @@ Feature: Playing a game of tic-tac-toe
     And the opponent player card indicates the active turn
     And the status says ""
 
-  Scenario: Continuing after a win returns to the home screen
+  Scenario: Continuing after the final match win returns to the home screen
     Given I open the tic-tac-toe game
     When I click the "Start game" button
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    When the winning-line animation completes
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    When the winning-line animation completes
     And I click cell 1
     And I click cell 4
     And I click cell 2
@@ -172,18 +200,14 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 8
     And I click cell 7
     And I click cell 9
-    Then the status says "It's a draw!"
-    And the turn announcement says "It's a draw!"
-    And the result dialog says "Draw"
-    And the result dialog detail says "No spaces left on the board."
+    Then the X player score is 0
+    And all board cells are empty
     And player statistics include:
-      | games_played | 1 |
+      | games_played | 2 |
       | moves_played | 9 |
       | wins         | 0 |
       | draws        | 1 |
       | losses       | 0 |
-      | last_move    | {"cell":8,"mark":"X"} |
-    And all board cells are disabled
 
   Scenario: The game page scales to fit the viewport
     Given I open the tic-tac-toe game

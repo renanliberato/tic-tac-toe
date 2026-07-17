@@ -222,11 +222,30 @@ body {
   display: flex;
   min-width: 0;
   flex: 1 1 0;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
   padding: 20px 24px;
   border: 2px solid currentColor;
   border-radius: 16px;
+  text-align: left;
   transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.game .player-card__identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.game .player-card[data-player="opponent"] .player-card__identity {
+  text-align: right;
+}
+
+.game .player-card strong.player-score {
+  flex: 0 0 auto;
+  font-size: 1.25em;
+  line-height: 1;
 }
 
 .game .player-card--active[data-player="local"] {

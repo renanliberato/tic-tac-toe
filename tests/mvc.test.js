@@ -32,9 +32,9 @@ class FakeView {
 
   bindDialogGuards() {}
 
-  render(state, gameStarted, winningLine, player, opponent) {
+  render(state, gameStarted, winningLine, player, opponent, matchScore) {
     this.events.push("render");
-    this.rendered.push({ state, gameStarted, winningLine, player, opponent, gameVisible: this.gameVisible });
+    this.rendered.push({ state, gameStarted, winningLine, player, opponent, matchScore, gameVisible: this.gameVisible });
   }
 
   showMatchmaking() { this.gameVisible = false; this.actions.push("showMatchmaking"); }
@@ -63,8 +63,8 @@ function createViewDocument() {
       <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
       <section id="game-screen" aria-labelledby="turn-announcement" hidden>
         <div class="players">
-          <div class="player-card" data-player="local"><strong id="player-name"></strong></div>
-          <div class="player-card" data-player="opponent" hidden><strong id="opponent-name"></strong></div>
+          <div class="player-card" data-player="local"><strong id="player-name"></strong><strong id="player-score"></strong></div>
+          <div class="player-card" data-player="opponent" hidden><strong id="opponent-score"></strong><strong id="opponent-name"></strong></div>
         </div>
         <p id="turn-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
         <p id="status" class="status"></p>
@@ -121,47 +121,7 @@ describe("MVC game architecture", () => {
     expect(view.events.slice(-3)).toEqual(["showGame", "render", "focusFirstCell"]);
   });
 
-  it("coordinates matchmaking, moves, and a winning result without a DOM", async () => {
-    const model = new GameModel();
-    const view = new FakeView();
-    let matchmakingCallback;
-    let scheduledTimers = 0;
-    const timer = {
-      setTimeout(callback) {
-        matchmakingCallback = callback;
-        scheduledTimers += 1;
-        return scheduledTimers;
-      },
-      clearTimeout() {}
-    };
-    const controller = new GameController(model, view, timer);
-
-    expect(view.rendered.at(-1).gameStarted).toBe(false);
-    view.startHandler();
-    view.startHandler();
-    expect(scheduledTimers).toBe(1);
-    expect(view.actions).toContain("showMatchmaking");
-    const opponent = view.rendered.at(-1).opponent;
-    expect(opponent.opponent_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    );
-    expect(opponent.opponent_name).toBeTruthy();
-
-    matchmakingCallback();
-    expect(view.rendered.at(-1).gameStarted).toBe(true);
-    expect(view.rendered.at(-1).opponent).toEqual(opponent);
-    expect(view.actions).toContain("showGame");
-
-    for (const index of [0, 3, 1, 4, 2]) controller.play(index);
-
-    expect(view.winningLines).toEqual([[0, 1, 2]]);
-    expect(view.resultStates).toHaveLength(0);
-    await Promise.resolve();
-    expect(view.resultStates).toHaveLength(1);
-    expect(view.resultStates[0].winner).toBe("X");
-  });
-
-  it("opens a draw result immediately and returns home on continue", () => {
+  it("scores a non-final win and automatically starts the next X round", async () => {
     const model = new GameModel();
     const view = new FakeView();
     const controller = new GameController(model, view, {
@@ -170,19 +130,77 @@ describe("MVC game architecture", () => {
     });
 
     controller.startGame();
-    const opponent = view.rendered.at(-1).opponent;
-    expect(opponent.opponent_id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    );
-    expect(opponent.opponent_name).toBeTruthy();
+    for (const index of [0, 3, 1, 4, 2]) controller.play(index);
+
+    expect(view.winningLines).toEqual([[0, 1, 2]]);
+    expect(view.rendered.at(-1).matchScore).toEqual({ X: 1, O: 0 });
+    expect(view.resultStates).toHaveLength(0);
+    await Promise.resolve();
+    expect(model.getState().board).toEqual(Array(9).fill(null));
+    expect(model.getState().player).toBe("X");
+    expect(view.events).toContain("focusFirstCell");
+    expect(view.rendered.at(-1).matchScore).toEqual({ X: 1, O: 0 });
+  });
+
+  it("automatically starts a fresh round after a draw without changing score", () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    const controller = new GameController(model, view, {
+      setTimeout: () => 1,
+      clearTimeout: () => {}
+    });
+
+    controller.startGame();
     for (const index of [0, 1, 2, 4, 3, 5, 7, 6, 8]) controller.play(index);
 
-    expect(view.resultStates).toHaveLength(1);
-    expect(view.resultStates[0].draw).toBe(true);
-
-    view.continueHandler();
-    expect(view.actions).toContain("showHome");
+    expect(view.resultStates).toHaveLength(0);
     expect(model.getState().board).toEqual(Array(9).fill(null));
+    expect(model.getState().player).toBe("X");
+    expect(view.rendered.at(-1).matchScore).toEqual({ X: 0, O: 0 });
+  });
+
+  it("shows the result only when a player reaches three points and keeps O scoring separate", async () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    const controller = new GameController(model, view, {
+      setTimeout: () => 1,
+      clearTimeout: () => {}
+    });
+
+    controller.startGame();
+    for (let round = 0; round < 3; round += 1) {
+      for (const index of [0, 1, 2, 4, 3, 7]) controller.play(index);
+      await Promise.resolve();
+    }
+
+    expect(view.rendered.at(-1).matchScore).toEqual({ X: 0, O: 3 });
+    expect(view.resultStates).toHaveLength(1);
+    expect(view.resultStates[0].winner).toBe("O");
+    expect(model.getState().board).not.toEqual(Array(9).fill(null));
+  });
+
+  it("ignores a completed-round animation callback after leaving the match", async () => {
+    const model = new GameModel();
+    const view = new FakeView();
+    let resolveAnimation;
+    view.animateWinningLine = (line) => {
+      view.winningLines.push(line);
+      return new Promise((resolve) => { resolveAnimation = resolve; });
+    };
+    const controller = new GameController(model, view, {
+      setTimeout: () => 1,
+      clearTimeout: () => {}
+    });
+
+    controller.startGame();
+    for (const index of [0, 3, 1, 4, 2]) controller.play(index);
+    controller.showHome();
+    resolveAnimation();
+    await Promise.resolve();
+
+    expect(view.resultStates).toHaveLength(0);
+    expect(model.getState().board).toEqual(Array(9).fill(null));
+    expect(view.actions).not.toContain("focusFirstCell");
   });
 
   it("renders state and winning-line geometry in the DOM view", () => {
@@ -212,6 +230,10 @@ describe("MVC game architecture", () => {
 
     expect(documentRef.querySelector("#player-name").textContent).toBe("PixelPilot");
     expect(documentRef.querySelector("#opponent-name").textContent).toBe("Ace");
+    expect(documentRef.querySelector("#player-score").textContent).toBe("0");
+    expect(documentRef.querySelector("#opponent-score").textContent).toBe("0");
+    expect(documentRef.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 0");
+    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 0");
     expect(documentRef.querySelector("[data-player=\"opponent\"]").hidden).toBe(false);
     expect([...view.cells].map((cell) => cell.textContent)).toEqual([
       "X", "X", "X", "O", "", "", "", "", ""
@@ -237,6 +259,21 @@ describe("MVC game architecture", () => {
     expect(oIcon.querySelector("circle").getAttribute("r")).toBe("29");
     expect(oIcon.querySelector("circle").classList.contains("mark-icon__stroke")).toBe(true);
     expect(view.cells[4].querySelector("svg")).toBeNull();
+
+    view.render({
+      board: ["X", "X", "X", "O", null, null, null, null, null],
+      player: "X",
+      winner: "X",
+      draw: false
+    }, true, [0, 1, 2],
+    { player_name: "PixelPilot" },
+    { opponent_id: "123e4567-e89b-42d3-a456-426614174000", opponent_name: "Ace" }, { X: 2, O: 1 });
+    expect(documentRef.querySelector("#player-score").textContent).toBe("2");
+    expect(documentRef.querySelector("#opponent-score").textContent).toBe("1");
+    expect(documentRef.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 2");
+    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 1");
+    expect(documentRef.querySelector("[data-player=\"local\"]").dataset.score).toBe("2");
+    expect(documentRef.querySelector("[data-player=\"opponent\"]").dataset.score).toBe("1");
 
     expect(view.cells.slice(0, 3).every((cell) => cell.classList.contains("cell--winner"))).toBe(true);
     expect(view.cells[0].disabled).toBe(true);

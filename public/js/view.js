@@ -33,6 +33,8 @@ export class GameView {
     this.playerName = documentRef.querySelector("#player-name");
     this.opponentName = documentRef.querySelector("#opponent-name");
     this.opponentPanel = documentRef.querySelector("[data-player=\"opponent\"]");
+    this.playerScore = documentRef.querySelector("#player-score");
+    this.opponentScore = documentRef.querySelector("#opponent-score");
     this.matchmakingDialog = documentRef.querySelector("#matchmaking-dialog");
     this.resultDialog = documentRef.querySelector("#result-dialog");
     this.resultMessage = documentRef.querySelector("#result-message");
@@ -77,8 +79,8 @@ export class GameView {
     this.preventDialogDismissal(this.resultDialog);
   }
 
-  render(state, gameStarted, winningLine = [], player = null, opponent = null) {
-    this.renderPlayers(player, opponent, state, gameStarted);
+  render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null) {
+    this.renderPlayers(player, opponent, state, gameStarted, matchScore);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
       cell.replaceChildren(mark ? this.createMarkIcon(mark) : "");
@@ -140,7 +142,19 @@ export class GameView {
     return icon;
   }
 
-  renderPlayers(player, opponent, state, gameStarted) {
+  renderPlayers(player, opponent, state, gameStarted, matchScore = null) {
+    const localScore = String(matchScore?.X ?? 0);
+    const opponentScore = String(matchScore?.O ?? 0);
+    if (this.playerScore) {
+      this.playerScore.textContent = localScore;
+      this.playerScore.setAttribute("aria-label", `Your score: ${localScore}`);
+    }
+    if (this.opponentScore) {
+      this.opponentScore.textContent = opponentScore;
+      this.opponentScore.setAttribute("aria-label", `Opponent score: ${opponentScore}`);
+    }
+    if (this.playerPanel) this.playerPanel.dataset.score = localScore;
+    if (this.opponentPanel) this.opponentPanel.dataset.score = opponentScore;
     if (this.playerName) this.playerName.textContent = player?.player_name || "You";
     if (this.opponentName) this.opponentName.textContent = opponent?.opponent_name || "";
 

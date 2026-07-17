@@ -42,8 +42,8 @@ beforeEach(() => {
       <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
       <section id="game-screen" aria-labelledby="turn-announcement" hidden>
         <div class="players">
-          <div class="player-card" data-player="local" data-mark="X"><strong id="player-name"></strong></div>
-          <div class="player-card" data-player="opponent" data-mark="O" hidden><strong id="opponent-name"></strong></div>
+          <div class="player-card" data-player="local" data-mark="X"><strong id="player-name"></strong><strong id="player-score"></strong></div>
+          <div class="player-card" data-player="opponent" data-mark="O" hidden><strong id="opponent-score"></strong><strong id="opponent-name"></strong></div>
         </div>
         <p id="turn-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
         <p id="status" class="status"></p>
@@ -94,7 +94,7 @@ describe("game entry point", () => {
     expect(updatedPlayer.last_move).toEqual({ cell: 0, mark: "X" });
   });
 
-  it("records a terminal result before the winning-line animation finishes", async () => {
+  it("records a round result before automatically starting the next board", async () => {
     const storage = createStorage();
     globalThis.localStorage = storage;
 
@@ -116,13 +116,16 @@ describe("game entry point", () => {
       losses: 0
     });
     expect(document.querySelector("#result-dialog").open).toBe(false);
+    expect(document.querySelector("#player-score").textContent).toBe("1");
 
     await vi.advanceTimersByTimeAsync(700);
 
-    expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY)).wins).toBe(1);
+    expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY))).toMatchObject({ games_played: 2, wins: 1 });
+    expect([...document.querySelectorAll("[data-cell]")].every((cell) => cell.textContent === "")).toBe(true);
+    expect(document.querySelector("#player-score").textContent).toBe("1");
   });
 
-  it("records a result for each new game after returning home", async () => {
+  it("records each board round and resets match state for a new match", async () => {
     const storage = createStorage();
     globalThis.localStorage = storage;
 
@@ -145,7 +148,7 @@ describe("game entry point", () => {
     }
 
     expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY))).toMatchObject({
-      games_played: 2,
+      games_played: 3,
       moves_played: 10,
       wins: 2,
       draws: 0,
@@ -220,6 +223,10 @@ describe("game entry point", () => {
     expect(document.querySelector("#home-screen").hidden).toBe(true);
     expect(document.querySelector("#game-screen").hidden).toBe(false);
     expect(document.querySelector("#status").textContent).toBe("");
+    expect(document.querySelector("#player-score").textContent).toBe("0");
+    expect(document.querySelector("#opponent-score").textContent).toBe("0");
+    expect(document.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 0");
+    expect(document.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 0");
     expect(document.querySelector("#turn-announcement").textContent).toBe("Player X's turn");
     expect(document.querySelector("#game-screen").getAttribute("aria-labelledby")).toBe("turn-announcement");
     expect(document.querySelector("[data-player=\"local\"]").classList.contains("player-card--active")).toBe(true);
@@ -238,8 +245,10 @@ describe("game entry point", () => {
     expect(document.querySelector("#status").classList.contains("status--updated")).toBe(true);
   });
 
-  it("shows a draw result and keeps the dialog open when dismissal is attempted", async () => {
-    await import("../public/js/main.js?draw-dialog");
+  it("starts the next board automatically after a draw without changing the match score", async () => {
+    const storage = createStorage();
+    globalThis.localStorage = storage;
+    await import("../public/js/main.js?draw-round");
 
     document.querySelector("#start-game").click();
     vi.advanceTimersByTime(3000);
@@ -247,18 +256,17 @@ describe("game entry point", () => {
       document.querySelector(`[data-cell="${index}"]`).click();
     }
 
-    const dialog = document.querySelector("#result-dialog");
-    expect(dialog.open).toBe(true);
-    expect(document.querySelector("#result-message").textContent).toBe("Draw");
-    expect(document.querySelector("#result-detail").textContent).toBe("No spaces left on the board.");
-    expect(document.querySelector(".board").classList.contains("board--draw")).toBe(true);
-    expect(document.querySelector(".game").classList.contains("game--celebrating")).toBe(true);
-    expect(document.querySelector("#status").classList.contains("status--draw")).toBe(true);
-
-    const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
-    expect(dialog.dispatchEvent(cancelEvent)).toBe(false);
-    expect(cancelEvent.defaultPrevented).toBe(true);
-    expect(dialog.open).toBe(true);
+    expect(document.querySelector("#result-dialog").open).toBe(false);
+    expect(document.querySelector("#player-score").textContent).toBe("0");
+    expect(document.querySelector("#opponent-score").textContent).toBe("0");
+    expect([...document.querySelectorAll("[data-cell]")].every((cell) => cell.textContent === "")).toBe(true);
+    expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY))).toMatchObject({
+      games_played: 2,
+      moves_played: 9,
+      wins: 0,
+      draws: 1,
+      losses: 0
+    });
   });
 
   it("shows the winner dialog and returns home when Continue is clicked", async () => {
@@ -269,6 +277,12 @@ describe("game entry point", () => {
 
     setBoardMetrics();
 
+    for (let round = 0; round < 2; round += 1) {
+      for (const index of [0, 3, 1, 4, 2]) {
+        document.querySelector(`[data-cell="${index}"]`).click();
+      }
+      await vi.advanceTimersByTimeAsync(700);
+    }
     for (const index of [0, 3, 1, 4, 2]) {
       document.querySelector(`[data-cell="${index}"]`).click();
     }
