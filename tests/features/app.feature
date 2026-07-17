@@ -148,3 +148,32 @@ Feature: Playing against the Computer
       | coin_balance   | 11      |
       | owned_styles   | classic |
       | equipped_style | classic |
+
+  Scenario: A player claims the recurring daily gift
+    Given I open the tic-tac-toe game
+    Then the daily gifts dialog is visible
+    And the daily gift progress shows day 1 available with seven rewards
+    And the coin balance shows "0000"
+    When I claim the daily gift
+    And the daily gift claim animation completes
+    Then the daily gifts dialog is hidden
+    And player statistics include:
+      | coin_balance  | 10 |
+      | pending_coins | 10 |
+    When the coin celebration completes
+    Then the coin balance shows "0010"
+    And player statistics include:
+      | coin_balance  | 10 |
+      | pending_coins | 0  |
+    When I open daily gifts
+    Then the daily gifts dialog is visible
+    And the daily gift is already claimed
+
+  Scenario: A daily gift claimed in another tab updates this tab
+    Given I open the tic-tac-toe game
+    Then the daily gifts dialog is visible
+    When another tab claims the daily gift
+    Then the daily gifts dialog is hidden
+    And the coin balance shows "0010"
+    And player statistics include:
+      | coin_balance | 10 |

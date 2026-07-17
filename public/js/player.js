@@ -3,11 +3,42 @@ import { getCycle } from "./leaderboard.js";
 import { DEFAULT_STYLE_ID, getBoardStyle, isBoardStyleId } from "./board-styles.js";
 
 export const PLAYER_STORAGE_KEY = "tic-tac-toe-player";
+export const DAILY_GIFT_REWARDS = Object.freeze([10, 10, 10, 10, 10, 10, 100]);
 
 export { createOpponent, createUuid, getNameForId };
 
 let memoryPlayer = null;
+const failedStorages = new WeakSet();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function isLocalDate(value) {
+  if (typeof value !== "string" || !LOCAL_DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+/** Return a lexically sortable date in the user's local calendar. */
+export function getLocalDate(now = new Date()) {
+  const value = typeof now === "function" ? now() : now;
+  if (isLocalDate(value)) return value;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return getLocalDate(new Date());
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function freshGift(date) {
+  return { day: 1, claimed: false, eligible_date: date, revision: 0 };
+}
+
+function validGift(gift) {
+  return gift && typeof gift === "object"
+    && Number.isInteger(gift.day) && gift.day >= 1 && gift.day <= 7
+    && typeof gift.claimed === "boolean" && isLocalDate(gift.eligible_date)
+    && Number.isInteger(gift.revision) && gift.revision >= 0;
+}
 
 function getStorage(storage) {
   if (storage !== undefined) return storage;
@@ -72,7 +103,9 @@ function normalizeOwnedStyles(value) {
 }
 
 export function normalizePlayer(value, timestamp = Date.now()) {
-  const cycle = getCycle(timestamp);
+  const cycleTimestamp = isLocalDate(timestamp)
+    ? new Date(`${timestamp}T12:00:00`).getTime() : timestamp;
+  const cycle = getCycle(cycleTimestamp);
   const storedCycle = asCount(value.leaderboard_cycle);
   const cycleMatches = cycle && Number.isInteger(value.leaderboard_cycle)
     && value.leaderboard_cycle >= 0 && storedCycle === cycle.index;
@@ -92,6 +125,7 @@ export function normalizePlayer(value, timestamp = Date.now()) {
     leaderboard_cycle: cycle ? cycle.index : null,
     leaderboard_score: cycleMatches ? asCount(value.leaderboard_score) : 0,
     owned_styles: normalizeOwnedStyles(value.owned_styles),
+    daily_gift: validGift(value.daily_gift) ? { ...value.daily_gift } : freshGift(getLocalDate(timestamp)),
     equipped_style: isBoardStyleId(value.equipped_style)
       && normalizeOwnedStyles(value.owned_styles).includes(value.equipped_style)
       ? value.equipped_style : DEFAULT_STYLE_ID
@@ -116,12 +150,46 @@ export function savePlayer(player, storage, timestamp = Date.now()) {
   if (!resolvedStorage) return normalizedPlayer;
 
   try {
-    resolvedStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(normalizedPlayer));
+    const serialized = JSON.stringify(normalizedPlayer);
+    resolvedStorage.setItem(PLAYER_STORAGE_KEY, serialized);
+    if (resolvedStorage.getItem(PLAYER_STORAGE_KEY) !== serialized) failedStorages.add(resolvedStorage);
+    else failedStorages.delete(resolvedStorage);
   } catch {
-    // A full or restricted storage should not stop someone from playing.
+    failedStorages.add(resolvedStorage);
   }
 
   return normalizedPlayer;
+}
+
+/** Read an external update without treating it as a new startup. */
+export function readLatestPlayer(storage, now = new Date()) {
+  const resolvedStorage = getStorage(storage);
+  const date = getLocalDate(now);
+  const stored = readPlayer(resolvedStorage, date);
+  if (!stored) return memoryPlayer ? normalizePlayer(memoryPlayer, date) : null;
+  if (failedStorages.has(resolvedStorage) && memoryPlayer?.player_id === stored.player_id
+      && memoryPlayer.daily_gift.revision >= stored.daily_gift.revision) return memoryPlayer;
+  memoryPlayer = stored;
+  return stored;
+}
+
+/** Atomically mark the offered gift claimed and add its durable/pending coins. */
+export function claimDailyGift(player, storage) {
+  const resolvedStorage = getStorage(storage);
+  const latest = readLatestPlayer(resolvedStorage) || normalizePlayer(player);
+  const expected = player?.daily_gift;
+  const gift = latest.daily_gift;
+  const sameOffer = expected && latest.player_id === player.player_id
+    && expected.day === gift.day && expected.eligible_date === gift.eligible_date
+    && expected.revision === gift.revision && !expected.claimed && !gift.claimed;
+  if (!sameOffer) return { player: latest, claimed: false, amount: 0 };
+  const amount = DAILY_GIFT_REWARDS[gift.day - 1];
+  const updated = savePlayer({
+    ...latest, coin_balance: latest.coin_balance + amount,
+    pending_coins: latest.pending_coins + amount,
+    daily_gift: { ...gift, claimed: true, revision: gift.revision + 1 }
+  }, resolvedStorage);
+  return { player: updated, claimed: true, amount };
 }
 
 export function getOrCreatePlayer(storage, timestamp = Date.now()) {
@@ -129,16 +197,33 @@ export function getOrCreatePlayer(storage, timestamp = Date.now()) {
   const storedPlayer = readPlayer(resolvedStorage, timestamp);
 
   if (storedPlayer) {
-    memoryPlayer = savePlayer(storedPlayer, resolvedStorage, timestamp);
+    memoryPlayer = savePlayer(evaluateDailyGift(storedPlayer, timestamp), resolvedStorage, timestamp);
     return memoryPlayer;
   }
 
   if (!resolvedStorage && memoryPlayer) {
-    memoryPlayer = normalizePlayer(memoryPlayer, timestamp);
+    memoryPlayer = evaluateDailyGift(memoryPlayer, timestamp);
     return memoryPlayer;
   }
 
   return savePlayer(newPlayer(), resolvedStorage, timestamp);
+}
+
+/** Normalize a gift and advance it once when a new local calendar day begins. */
+export function evaluateDailyGift(player, now = new Date()) {
+  const date = getLocalDate(now);
+  const normalized = normalizePlayer(player, now);
+  const gift = normalized.daily_gift;
+  if (date <= gift.eligible_date) return normalized;
+  return {
+    ...normalized,
+    daily_gift: {
+      day: gift.claimed ? (gift.day % DAILY_GIFT_REWARDS.length) + 1 : gift.day,
+      claimed: gift.claimed ? false : gift.claimed,
+      eligible_date: date,
+      revision: gift.revision + 1
+    }
+  };
 }
 
 function withLatestLeaderboard(player, storage, timestamp) {
@@ -231,11 +316,12 @@ export function awardCoins(player, amount = 3, storage, timestamp = Date.now()) 
 }
 
 /** Mark all earned coins as presented without changing the durable balance. */
-export function consumePendingCoins(player, storage, timestamp = Date.now()) {
+export function consumePendingCoins(player, storage, amount = Number.POSITIVE_INFINITY) {
+  const consumed = Number.isInteger(amount) && amount >= 0 ? amount : Number.POSITIVE_INFINITY;
   return savePlayer({
     ...player,
-    pending_coins: 0
-  }, storage, timestamp);
+    pending_coins: Math.max(0, asCount(player.pending_coins) - consumed)
+  }, storage);
 }
 
 /** Atomically purchases/equips a catalog style and returns a descriptive result. */

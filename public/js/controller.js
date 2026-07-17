@@ -10,7 +10,10 @@ import {
   updatePlayerAfterMatch,
   awardCoins,
   consumePendingCoins,
-  activatePlayerStyle
+  activatePlayerStyle,
+  claimDailyGift,
+  readLatestPlayer,
+  PLAYER_STORAGE_KEY
 } from "./player.js";
 
 const AI_MOVE_DELAY = 500;
@@ -46,12 +49,17 @@ export class GameController {
     this.matchScore = createMatchScore();
     this.resultRecorded = false;
     this.roundId = 0;
+    this.coinPresentationActive = false;
+    this.coinPresentationQueue = [];
+    this.scheduledPendingCoins = 0;
+    this.startupGiftHandled = false;
 
     this.model.subscribe(() => this.render());
     this.bindViewEvents();
     this.view.bindDialogGuards();
     this.render();
-    this.enterHomePresentation();
+    this.bindStorageSync();
+    this.startupDailyGift();
   }
 
   bindViewEvents() {
@@ -69,6 +77,7 @@ export class GameController {
     this.view.onStyles?.(() => this.showStyles());
     this.view.onStylesBack?.(() => this.showProfileFromStyles());
     this.view.onStyle?.((styleId, tile) => this.activateStyle(styleId, tile));
+    this.view.onDailyGiftOpen?.(() => this.openDailyGift(this.view.dailyGiftLauncher));
   }
 
   render() {
@@ -202,9 +211,80 @@ export class GameController {
     this.enterHomePresentation();
   }
 
+  startupDailyGift() {
+    if (!this.startupGiftHandled && !this.player.daily_gift.claimed && this.view.openDailyGift) {
+      this.startupGiftHandled = true;
+      if (this.openDailyGift(this.view.dailyGiftLauncher)) {
+        this.view.renderCoinBalance?.(Math.max(0, this.player.coin_balance - this.player.pending_coins));
+        return;
+      }
+    }
+    this.startupGiftHandled = true;
+    this.enterHomePresentation();
+  }
+
+  openDailyGift(opener) {
+    return this.view.openDailyGift?.(this.player.daily_gift, {
+      claim: () => this.claimDailyGift(),
+      dismiss: () => { if (!this.coinPresentationActive) this.enterHomePresentation(); }
+    }, opener);
+  }
+
+  claimDailyGift() {
+    const priorPending = this.player.pending_coins;
+    const result = claimDailyGift(this.player);
+    this.player = result.player;
+    if (!result.claimed) {
+      this.view.renderDailyGift?.(this.player.daily_gift);
+      this.view.closeDailyGift?.();
+      this.view.renderCoinBalance?.(this.player.coin_balance);
+      return;
+    }
+    const finish = () => {
+      this.view.closeDailyGift?.();
+      const amount = this.coinPresentationActive ? result.amount : priorPending + result.amount;
+      this.queueCoinPresentation(amount);
+    };
+    const animation = this.view.animateDailyGiftClaim?.(this.player.daily_gift);
+    if (animation?.then) animation.then(finish); else finish();
+  }
+
   enterHomePresentation() {
-    this.view.enterHome?.(this.player, () => {
-      this.player = consumePendingCoins(this.player, undefined, this.now());
+    const unscheduled = Math.max(0, this.player.pending_coins - this.scheduledPendingCoins);
+    if (unscheduled > 0) this.queueCoinPresentation(unscheduled);
+    else if (!this.coinPresentationActive) this.view.renderCoinBalance?.(this.player.coin_balance);
+  }
+
+  queueCoinPresentation(amount) {
+    if (!Number.isInteger(amount) || amount <= 0) return;
+    this.scheduledPendingCoins += amount;
+    if (this.coinPresentationActive) { this.coinPresentationQueue.push(amount); return; }
+    this.startCoinPresentation(amount);
+  }
+
+  startCoinPresentation(amount) {
+    this.coinPresentationActive = true;
+    const presentation = { ...this.player, pending_coins: amount };
+    const complete = () => {
+      this.player = consumePendingCoins(this.player, undefined, amount);
+      this.scheduledPendingCoins = Math.max(0, this.scheduledPendingCoins - amount);
+      this.coinPresentationActive = false;
+      const next = this.coinPresentationQueue.shift();
+      if (next) this.startCoinPresentation(next);
+    };
+    if (this.view.enterHome) this.view.enterHome(presentation, complete); else complete();
+  }
+
+  bindStorageSync() {
+    const windowRef = this.view.document?.defaultView;
+    windowRef?.addEventListener?.("storage", event => {
+      if (event.key !== PLAYER_STORAGE_KEY) return;
+      const latest = readLatestPlayer();
+      if (!latest || latest.player_id !== this.player.player_id) return;
+      this.player = latest;
+      this.view.renderDailyGift?.(latest.daily_gift);
+      if (!this.coinPresentationActive) this.view.renderCoinBalance?.(latest.coin_balance);
+      if (latest.daily_gift.claimed && this.view.dailyGiftMode === "claimable") this.view.closeDailyGift?.();
     });
   }
 
@@ -227,6 +307,10 @@ export class GameController {
 
   showProfile() {
     this.view.finishCoinPresentation?.();
+    if (!this.coinPresentationActive && this.player.pending_coins > 0) {
+      this.enterHomePresentation();
+      this.view.finishCoinPresentation?.();
+    }
     this.render();
     this.view.showProfile?.(this.player);
   }

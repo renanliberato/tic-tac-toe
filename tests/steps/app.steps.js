@@ -469,3 +469,69 @@ Then("an insufficient coins dialog says {string}", function (message) {
 Then("the last style choice regains focus", function () {
   assert.equal(this.dom.window.document.activeElement, this.lastStyleTile);
 });
+When("I claim the daily gift", function () {
+  const action = this.dom.window.document.querySelector("#daily-gifts-action");
+  assert.ok(action, "The daily gift action does not exist");
+  assert.equal(action.textContent, "Claim");
+  action.click();
+});
+
+When("the daily gift claim animation completes", async function () {
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 400));
+});
+
+When("I open daily gifts", function () {
+  const launcher = this.dom.window.document.querySelector("#daily-gifts-launcher");
+  assert.ok(launcher, "The daily gifts launcher does not exist");
+  launcher.click();
+});
+
+When("another tab claims the daily gift", function () {
+  const key = "tic-tac-toe-player";
+  const player = JSON.parse(this.dom.window.localStorage.getItem(key));
+  player.coin_balance += 10;
+  player.pending_coins += 10;
+  player.daily_gift = {
+    ...player.daily_gift,
+    claimed: true,
+    revision: player.daily_gift.revision + 1
+  };
+  this.dom.window.localStorage.setItem(key, JSON.stringify(player));
+  const event = new this.dom.window.Event("storage");
+  Object.defineProperty(event, "key", { value: key });
+  this.dom.window.dispatchEvent(event);
+});
+
+
+
+Then("the daily gifts dialog is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#daily-gifts-dialog").open, true);
+});
+
+Then("the daily gifts dialog is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#daily-gifts-dialog").open, false);
+});
+
+Then("the daily gift progress shows day 1 available with seven rewards", function () {
+  const cells = [...this.dom.window.document.querySelectorAll("#daily-gifts-grid [data-day]")];
+  assert.equal(cells.length, 7);
+  assert.equal(cells[0].getAttribute("aria-label"), "Day 1, 10 coins, available");
+  assert.equal(cells[0].classList.contains("daily-gift-cell--current"), true);
+  assert.equal(cells[6].getAttribute("aria-label"), "Day 7, 100 coins");
+});
+
+Then("the daily gift is already claimed", function () {
+  const dialog = this.dom.window.document.querySelector("#daily-gifts-dialog");
+  assert.equal(dialog.dataset.mode, "readonly");
+  assert.equal(dialog.querySelector("#daily-gifts-action").textContent, "Close");
+  assert.equal(dialog.querySelector("[data-day=\"1\"]").getAttribute("aria-label"), "Day 1, 10 coins, claimed");
+  assert.equal(dialog.querySelector("#daily-gifts-description").textContent, "Come back tomorrow for your next gift.");
+});
+
+Then("the matchmaking dialog is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, true);
+});
+
+Then("the matchmaking dialog is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#matchmaking-dialog").open, false);
+});

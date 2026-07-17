@@ -9,6 +9,8 @@ const COIN_TRAVEL_DURATION = 1100;
 const COIN_TOTAL_DURATION = 1400;
 const COIN_SIZE = 58;
 const MAX_FLYING_COINS = 20;
+const DAILY_GIFT_CHECK_DURATION = 360;
+const DAILY_GIFT_REWARDS = [10, 10, 10, 10, 10, 10, 100];
 
 export function formatCoinBalance(balance) {
   const value = Number.isInteger(balance) && balance >= 0 ? balance : 0;
@@ -70,6 +72,15 @@ export class GameView {
     this.coinAnnouncement = documentRef.querySelector("#coin-announcement");
     this.coinPresentation = null;
     this.coinPresentationId = 0;
+    this.dailyGiftLauncher = documentRef.querySelector("#daily-gifts-launcher");
+    this.dailyGiftDialog = documentRef.querySelector("#daily-gifts-dialog");
+    this.dailyGiftGrid = documentRef.querySelector("#daily-gifts-grid");
+    this.dailyGiftDescription = documentRef.querySelector("#daily-gifts-description");
+    this.dailyGiftAction = documentRef.querySelector("#daily-gifts-action");
+    this.dailyGiftClaiming = false;
+    this.dailyGiftMode = "readonly";
+    this.dailyGiftOpener = null;
+    this.dailyGiftHandlers = null;
     this.cells = [...documentRef.querySelectorAll("[data-cell]")];
     this.board = documentRef.querySelector(".board");
     this.status = documentRef.querySelector("#status");
@@ -113,6 +124,7 @@ export class GameView {
     }
 
     this.bindInsufficientDialog();
+    this.bindDailyGiftDialog();
     applyPageScale(this.gameRoot, documentRef.defaultView);
   }
 
@@ -126,6 +138,10 @@ export class GameView {
 
   onContinue(handler) {
     this.continueButton?.addEventListener("click", handler);
+  }
+
+  onDailyGiftOpen(handler) {
+    this.dailyGiftLauncher?.addEventListener("click", handler);
   }
 
   onProfile(handler) { this.profileButton?.addEventListener("click", handler); }
@@ -150,6 +166,97 @@ export class GameView {
   onLeaderboardRefresh(handler) {
     this.leaderboardRefreshHandler = handler;
   }
+
+  bindDailyGiftDialog() {
+    if (!this.dailyGiftDialog) return;
+    this.dailyGiftDialog.addEventListener("click", (event) => {
+      if (this.isDialogBackdropClick(event, this.dailyGiftDialog)) {
+        event.stopPropagation();
+        this.dismissDailyGift();
+        return;
+      }
+      if (this.dailyGiftClaiming) return;
+      if (this.dailyGiftMode === "claimable") {
+        this.dailyGiftClaiming = true;
+        this.dailyGiftAction && (this.dailyGiftAction.disabled = true);
+        this.dailyGiftHandlers?.claim?.();
+      } else {
+        this.dismissDailyGift();
+      }
+    });
+    this.dailyGiftDialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      this.dismissDailyGift();
+    });
+  }
+
+  isDialogBackdropClick(event, dialog) {
+    if (event.target !== dialog) return false;
+    const rect = dialog.getBoundingClientRect();
+    return event.clientX < rect.left || event.clientX > rect.right
+      || event.clientY < rect.top || event.clientY > rect.bottom;
+  }
+
+  renderDailyGift(gift) {
+    if (!this.dailyGiftGrid || !gift) return;
+    const cells = DAILY_GIFT_REWARDS.map((amount, index) => {
+      const day = index + 1;
+      const cell = this.document.createElement("div");
+      cell.className = "daily-gift-cell";
+      cell.dataset.day = String(day);
+      const claimed = day < gift.day || (day === gift.day && gift.claimed);
+      const current = day === gift.day && !gift.claimed;
+      cell.classList.toggle("daily-gift-cell--claimed", claimed);
+      cell.classList.toggle("daily-gift-cell--current", current);
+      cell.setAttribute("aria-label", `Day ${day}, ${amount} coins${claimed ? ", claimed" : current ? ", available" : ""}`);
+      cell.innerHTML = `<strong>Day ${day}</strong><span class="daily-gift-value"><span aria-hidden="true">¢</span> ${amount}</span><span class="daily-gift-check" aria-hidden="true">✓</span>`;
+      return cell;
+    });
+    this.dailyGiftGrid.replaceChildren(...cells);
+  }
+
+  openDailyGift(gift, handlers = {}, opener = null) {
+    if (!this.dailyGiftDialog || !gift || this.dailyGiftDialog.open) return false;
+    this.dailyGiftHandlers = handlers;
+    this.dailyGiftOpener = opener || this.document.activeElement || this.dailyGiftLauncher;
+    this.dailyGiftMode = gift.claimed ? "readonly" : "claimable";
+    this.dailyGiftClaiming = false;
+    this.renderDailyGift(gift);
+    if (this.dailyGiftDescription) this.dailyGiftDescription.textContent = gift.claimed
+      ? "Come back tomorrow for your next gift."
+      : "Tap anywhere to claim today's reward";
+    if (this.dailyGiftAction) {
+      this.dailyGiftAction.textContent = gift.claimed ? "Close" : "Claim";
+      this.dailyGiftAction.disabled = false;
+    }
+    this.dailyGiftDialog.dataset.mode = this.dailyGiftMode;
+    this.openDialog(this.dailyGiftDialog, this.dailyGiftAction);
+    return true;
+  }
+
+  dismissDailyGift() {
+    if (!this.dailyGiftDialog?.open && !this.dailyGiftDialog?.hasAttribute("open")) return;
+    const callback = this.dailyGiftHandlers?.dismiss;
+    this.closeDailyGift();
+    callback?.();
+  }
+
+  closeDailyGift({ restoreFocus = true } = {}) {
+    if (!this.dailyGiftDialog) return;
+    this.closeDialog(this.dailyGiftDialog);
+    this.dailyGiftHandlers = null;
+    this.dailyGiftClaiming = false;
+    if (restoreFocus && this.dailyGiftOpener?.isConnected) this.dailyGiftOpener.focus();
+  }
+
+  animateDailyGiftClaim(gift) {
+    this.renderDailyGift(gift);
+    const cell = this.dailyGiftGrid?.querySelector(`[data-day="${gift.day}"]`);
+    cell?.classList.add("daily-gift-cell--checking");
+    if (this.isReducedMotion()) return Promise.resolve();
+    return new Promise((resolve) => globalThis.setTimeout(resolve, DAILY_GIFT_CHECK_DURATION));
+  }
+
 
   preventDialogDismissal(dialog) {
     dialog?.addEventListener("cancel", (event) => {
@@ -691,6 +798,7 @@ export class GameView {
     [this.homeScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
       .forEach((screen) => { if (screen) screen.hidden = screen !== this.homeScreen; });
     this.ensureHomeTitle();
+    if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = false;
     if (options.focusLeaderboard) this.leaderboardEntry?.focus();
     else if (options.focusProfile) this.profileButton?.focus();
     else this.start?.focus();
@@ -698,14 +806,18 @@ export class GameView {
 
   showMatchmaking() {
     this.stopLeaderboard();
+    this.closeDailyGift({ restoreFocus: false });
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = true;
+    if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = true;
   }
 
   showGame() {
     this.stopLeaderboard();
+    this.closeDailyGift({ restoreFocus: false });
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = false;
+    if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = true;
   }
 
   hideScreens(active) {
