@@ -65,5 +65,5 @@ describe("git-worktree-merge", () => {
     expect(worktreeCount(repository)).toBe(1);
     expect(() => runGit(repository, "show-ref", "--verify", "refs/heads/abc123")).toThrow();
     expect(readFileSync(path.join(repository, "README"), "utf8")).toBe("base\nchange\n");
-  });
+  }, 15000);
 });

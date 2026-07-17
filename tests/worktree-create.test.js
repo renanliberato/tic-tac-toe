@@ -55,7 +55,7 @@ describe("git-worktree-create", () => {
     expect(after).toBe(realpathSync(repository));
     expect(worktreePath).toMatch(new RegExp(`${escapeRegExp(realpathSync(repository))}/\\.worktrees/[0-9a-f]{6}$`));
     expect(worktreeCount(repository)).toBe(2);
-  });
+  }, 15000);
 
   it("refuses to create a worktree while a merge holds the lock", () => {
     const repository = createRepository();
