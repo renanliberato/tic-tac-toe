@@ -10,9 +10,23 @@ const htmlPath = path.join(root, "public/index.html");
 const mainPath = path.join(root, "public/js/main.js");
 
 class AppWorld {
-  async openGame() {
+  async openGame(pendingCoins = 0) {
     const html = await fs.readFile(htmlPath, "utf8");
     this.dom = new JSDOM(html, { url: "http://localhost/" });
+    if (pendingCoins > 0) {
+      const now = new Date();
+      const eligibleDate = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0")
+      ].join("-");
+      this.dom.window.localStorage.setItem("tic-tac-toe-player", JSON.stringify({
+        player_id: "00000000-0000-4000-8000-000000000001",
+        coin_balance: pendingCoins,
+        pending_coins: pendingCoins,
+        daily_gift: { day: 1, claimed: false, eligible_date: eligibleDate, revision: 0 }
+      }));
+    }
     globalThis.window = this.dom.window;
     globalThis.document = this.dom.window.document;
     this.nativeSetTimeout = globalThis.setTimeout;
@@ -53,6 +67,11 @@ After(function () {
 
 Given("I open the tic-tac-toe game", async function () {
   await this.openGame();
+  assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
+});
+
+Given("I open the tic-tac-toe game with {int} pending coins", async function (amount) {
+  await this.openGame(amount);
   assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
 });
 
@@ -112,6 +131,12 @@ When("I open daily gifts", function () {
   const launcher = this.dom.window.document.querySelector("#daily-gifts-launcher");
   assert.ok(launcher, "The daily gifts launcher does not exist");
   launcher.click();
+});
+
+When("I dismiss daily gifts", function () {
+  const dialog = this.dom.window.document.querySelector("#daily-gifts-dialog");
+  assert.ok(dialog, "The daily gifts dialog does not exist");
+  dialog.dispatchEvent(new this.dom.window.Event("cancel", { cancelable: true }));
 });
 
 When("another tab claims the daily gift", function () {
@@ -251,6 +276,13 @@ When("the winning-line animation completes", async function () {
 
 When("the coin celebration completes", async function () {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 1500));
+});
+
+Then("a coin celebration is active", function () {
+  assert.ok(
+    this.dom.window.document.querySelectorAll("[data-flying-coin]").length > 0,
+    "No flying coins are visible"
+  );
 });
 
 Then("the coin balance shows {string}", function (expected) {

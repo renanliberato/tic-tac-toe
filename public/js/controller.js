@@ -223,6 +223,7 @@ export class GameController {
       this.coinPresentationActive = false;
       const next = this.coinPresentationQueue.shift();
       if (next) this.startCoinPresentation(next);
+      else this.enterHomePresentation();
     };
     if (this.view.enterHome) this.view.enterHome(presentation, complete);
     else complete();
