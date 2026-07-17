@@ -76,6 +76,30 @@ Feature: Playing against the Computer
     And I click cell 7
     Then the turn announcement says "You won!"
     And the result dialog says "You won!"
+    And player statistics include:
+      | battle_pass_points | 1 |
+
+  Scenario: A player claims a reached monthly battle-pass reward
+    Given I have a player profile with 2 battle-pass points
+    And I open the tic-tac-toe game
+    When I open the battle pass
+    Then the battle pass screen is visible
+    And the battle pass shows 100 milestones
+    And the battle pass progress says "2 / 100 points"
+    And battle-pass milestone 1 is claimable
+    And battle-pass milestone 3 is locked
+    When I claim battle-pass milestone 1
+    Then the battle-pass announcement says "1 gold claimed from milestone 1"
+    And battle-pass milestone 1 is claimed
+    And player statistics include:
+      | battle_pass_points  | 2 |
+      | battle_pass_claimed | 1 |
+      | coin_balance        | 1 |
+      | pending_coins       | 1 |
+    When I return from the battle pass
+    Then the battle pass screen is hidden
+    And the home screen is visible
+    And the battle pass button has focus
 
   Scenario: The Computer is announced as the match winner
     Given I open the tic-tac-toe game

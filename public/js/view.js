@@ -1,6 +1,7 @@
 import { applyPageScale } from "./layout.js";
 import { createStandings, getCycle } from "./leaderboard.js";
 import { PLAYER_STORAGE_KEY } from "./player.js";
+import { BATTLE_PASS_MILESTONES, getBattlePassCycle } from "./battle-pass.js";
 import { BOARD_STYLES, getBoardStyle, styleTokens } from "./board-styles.js";
 
 const WINNING_LINE_DURATION = 700;
@@ -46,6 +47,14 @@ export class GameView {
     this.leaderboardList = documentRef.querySelector("#leaderboard-list");
     this.leaderboardMessage = documentRef.querySelector("#leaderboard-message");
     this.floatingLocalRow = documentRef.querySelector("#floating-local-row");
+    this.battlePassScreen = documentRef.querySelector("#battle-pass-screen");
+    this.battlePassEntry = documentRef.querySelector("#open-battle-pass");
+    this.battlePassBack = documentRef.querySelector("#battle-pass-back");
+    this.battlePassHeading = documentRef.querySelector("#battle-pass-title");
+    this.battlePassProgress = documentRef.querySelector("[data-battle-pass-progress]");
+    this.battlePassReset = documentRef.querySelector("[data-battle-pass-reset]");
+    this.battlePassList = documentRef.querySelector("#battle-pass-list");
+    this.battlePassAnnouncement = documentRef.querySelector("#battle-pass-announcement");
     this.profileScreen = documentRef.querySelector("#profile-screen");
     this.stylesScreen = documentRef.querySelector("#styles-screen");
     this.profileButton = documentRef.querySelector("#open-profile");
@@ -161,6 +170,21 @@ export class GameView {
 
   onLeaderboardBack(handler) {
     this.leaderboardBack?.addEventListener("click", handler);
+  }
+
+  onBattlePassOpen(handler) {
+    this.battlePassEntry?.addEventListener("click", handler);
+  }
+
+  onBattlePassBack(handler) {
+    this.battlePassBack?.addEventListener("click", handler);
+  }
+
+  onBattlePassClaim(handler) {
+    this.battlePassList?.addEventListener("click", (event) => {
+      const milestone = event.target.closest("[data-battle-pass-milestone]");
+      if (milestone && !milestone.disabled) handler(Number(milestone.dataset.battlePassMilestone));
+    });
   }
 
   onLeaderboardRefresh(handler) {
@@ -795,11 +819,12 @@ export class GameView {
 
   showHome(options = {}) {
     this.stopLeaderboard();
-    [this.homeScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
+    [this.homeScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
       .forEach((screen) => { if (screen) screen.hidden = screen !== this.homeScreen; });
     this.ensureHomeTitle();
     if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = false;
     if (options.focusLeaderboard) this.leaderboardEntry?.focus();
+    else if (options.focusBattlePass) this.battlePassEntry?.focus();
     else if (options.focusProfile) this.profileButton?.focus();
     else this.start?.focus();
   }
@@ -820,8 +845,15 @@ export class GameView {
     if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = true;
   }
 
+  showBattlePass(player, timestamp = this.now()) {
+    this.stopLeaderboard();
+    this.renderBattlePass(player, timestamp);
+    this.hideScreens(this.battlePassScreen);
+    this.battlePassHeading?.focus();
+  }
+
   hideScreens(active) {
-    [this.homeScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
+    [this.homeScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
       .forEach((screen) => { if (screen) screen.hidden = screen !== active; });
   }
 
@@ -834,6 +866,59 @@ export class GameView {
   showStyles() {
     this.hideScreens(this.stylesScreen);
     this.stylesHeading?.focus();
+  }
+
+  renderBattlePass(player = {}, timestamp = this.now()) {
+    const cycle = getBattlePassCycle(timestamp);
+    const points = Number.isInteger(player.battle_pass_points) && player.battle_pass_points >= 0
+      ? Math.min(player.battle_pass_points, BATTLE_PASS_MILESTONES.length) : 0;
+    const claimed = new Set(Array.isArray(player.battle_pass_claimed)
+      ? player.battle_pass_claimed : []);
+    if (this.battlePassProgress) {
+      this.battlePassProgress.textContent = `${points} / ${BATTLE_PASS_MILESTONES.length} points`;
+    }
+    if (this.battlePassReset) {
+      this.battlePassReset.textContent = `Resets ${new Date(cycle.end).toISOString().slice(0, 10)}`;
+    }
+    if (!this.battlePassList) return;
+
+    const fragment = this.document.createDocumentFragment();
+    BATTLE_PASS_MILESTONES.forEach((item) => {
+      const reached = points >= item.points;
+      const isClaimed = claimed.has(item.milestone);
+      const button = this.document.createElement("button");
+      button.type = "button";
+      button.className = `battle-pass-milestone battle-pass-milestone--${
+        isClaimed ? "claimed" : reached ? "available" : "locked"
+      }`;
+      button.dataset.battlePassMilestone = String(item.milestone);
+      button.disabled = isClaimed || !reached;
+      button.setAttribute("aria-label", isClaimed
+        ? `Milestone ${item.milestone}, claimed, ${item.reward} gold`
+        : reached
+          ? `Claim milestone ${item.milestone} for ${item.reward} gold`
+          : `Milestone ${item.milestone}, locked, requires ${item.points} points`);
+
+      const level = this.document.createElement("strong");
+      level.className = "battle-pass-milestone__level";
+      level.textContent = `Milestone ${item.milestone}`;
+      const requirement = this.document.createElement("span");
+      requirement.className = "battle-pass-milestone__requirement";
+      requirement.textContent = `${item.points} point${item.points === 1 ? "" : "s"}`;
+      const reward = this.document.createElement("span");
+      reward.className = "battle-pass-milestone__reward";
+      reward.textContent = `+${item.reward} gold`;
+      const action = this.document.createElement("span");
+      action.className = "battle-pass-milestone__action";
+      action.textContent = isClaimed ? "Claimed" : reached ? "Claim" : "Locked";
+      button.append(level, requirement, reward, action);
+      fragment.append(button);
+    });
+    this.battlePassList.replaceChildren(fragment);
+  }
+
+  announceBattlePass(message) {
+    if (this.battlePassAnnouncement) this.battlePassAnnouncement.textContent = message;
   }
 
   renderProfile(player = {}) {

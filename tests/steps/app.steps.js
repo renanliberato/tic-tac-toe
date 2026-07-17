@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
+import { getBattlePassCycle } from "../../public/js/battle-pass.js";
 import { After, Given, Then, When, setWorldConstructor } from "@cucumber/cucumber";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -86,6 +87,17 @@ Given("I open the tic-tac-toe game with {int} pending coins", async function (am
 Given("I open the game with a win streak of {int}", async function (streak) {
   await this.openGame({ win_streak: streak });
   assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
+});
+
+Given("I have a player profile with {int} battle-pass points", function (points) {
+  this.initialPlayer = {
+    player_id: "123e4567-e89b-42d3-a456-426614174000",
+    battle_pass_cycle: getBattlePassCycle().key,
+    battle_pass_points: points,
+    battle_pass_claimed: [],
+    coin_balance: 0,
+    pending_coins: 0
+  };
 });
 
 When("I click cell {int}", function (number) {
@@ -373,6 +385,27 @@ When("I return from the weekly leaderboard", function () {
   button.click();
 });
 
+When("I open the battle pass", function () {
+  const button = this.dom.window.document.querySelector("#open-battle-pass");
+  assert.ok(button, "The battle-pass button does not exist");
+  button.click();
+});
+
+When("I claim battle-pass milestone {int}", function (milestone) {
+  const button = this.dom.window.document.querySelector(
+    `[data-battle-pass-milestone="${milestone}"]`
+  );
+  assert.ok(button, `Battle-pass milestone ${milestone} does not exist`);
+  assert.equal(button.disabled, false, `Battle-pass milestone ${milestone} is not claimable`);
+  button.click();
+});
+
+When("I return from the battle pass", function () {
+  const button = this.dom.window.document.querySelector("#battle-pass-back");
+  assert.ok(button, "The battle-pass back button does not exist");
+  button.click();
+});
+
 When("another browser tab changes the leaderboard score to {int}", function (score) {
   const storage = this.dom.window.localStorage;
   const oldValue = storage.getItem("tic-tac-toe-player");
@@ -389,6 +422,46 @@ When("another browser tab changes the leaderboard score to {int}", function (sco
 
 Then("the leaderboard screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, false);
+});
+
+Then("the battle pass screen is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#battle-pass-screen").hidden, false);
+});
+
+Then("the battle pass screen is hidden", function () {
+  assert.equal(this.dom.window.document.querySelector("#battle-pass-screen").hidden, true);
+});
+
+Then("the battle pass shows {int} milestones", function (count) {
+  assert.equal(
+    this.dom.window.document.querySelectorAll("#battle-pass-list [data-battle-pass-milestone]").length,
+    count
+  );
+});
+
+Then("the battle pass progress says {string}", function (expected) {
+  assert.equal(this.dom.window.document.querySelector("[data-battle-pass-progress]").textContent, expected);
+});
+
+Then("battle-pass milestone {int} is {word}", function (milestone, state) {
+  const button = this.dom.window.document.querySelector(
+    `[data-battle-pass-milestone="${milestone}"]`
+  );
+  assert.ok(button, `Battle-pass milestone ${milestone} does not exist`);
+  assert.equal(button.disabled, state === "locked" || state === "claimed");
+  const classState = state === "claimable" ? "available" : state;
+  assert.equal(button.classList.contains(`battle-pass-milestone--${classState}`), true);
+});
+
+Then("the battle-pass announcement says {string}", function (expected) {
+  assert.equal(
+    this.dom.window.document.querySelector("#battle-pass-announcement").textContent,
+    expected
+  );
+});
+
+Then("the battle pass button has focus", function () {
+  assert.equal(this.dom.window.document.activeElement.id, "open-battle-pass");
 });
 
 Then("the leaderboard screen is hidden", function () {

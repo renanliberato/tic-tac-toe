@@ -2,6 +2,8 @@ import { getWinningLine } from "./game.js";
 import { createOpponent } from "./identity.js";
 import {
   awardLeaderboardPoint,
+  awardPlayerBattlePassPoint,
+  claimPlayerBattlePassMilestone,
   getOrCreatePlayer,
   reconcileLeaderboardPlayer,
   reloadPlayer,
@@ -72,6 +74,9 @@ export class GameController {
     this.view.onContinue(() => this.showHome());
     this.view.onLeaderboardOpen?.(() => this.showLeaderboard());
     this.view.onLeaderboardBack?.(() => this.leaveLeaderboard());
+    this.view.onBattlePassOpen?.(() => this.showBattlePass());
+    this.view.onBattlePassBack?.(() => this.leaveBattlePass());
+    this.view.onBattlePassClaim?.((milestone) => this.claimBattlePass(milestone));
     this.view.onLeaderboardRefresh?.((fromStorage = false) =>
       this.refreshLeaderboardPlayer(fromStorage));
     this.view.onProfile?.(() => this.showProfile());
@@ -217,7 +222,7 @@ export class GameController {
     this.view.focusFirstCell();
   }
 
-  showHome() {
+  showHome(options = {}) {
     this.cancelComputerMove();
     this.view.stopLeaderboard?.();
     this.stopMatchmaking();
@@ -227,7 +232,7 @@ export class GameController {
     this.gameStarted = false;
     this.roundId += 1;
     this.model.reset();
-    this.view.showHome();
+    this.view.showHome(options);
     this.homePresentationEnabled = true;
     this.enterHomePresentation();
   }
@@ -346,6 +351,31 @@ export class GameController {
     this.view.showLeaderboard(this.player, this.now());
   }
 
+  showBattlePass() {
+    this.view.finishCoinPresentation?.();
+    this.player = reloadPlayer(undefined, this.now());
+    this.view.renderBattlePass?.(this.player, this.now());
+    this.view.showBattlePass?.(this.player, this.now());
+  }
+
+  leaveBattlePass() {
+    this.showHome({ focusBattlePass: true });
+  }
+
+  claimBattlePass(milestone) {
+    const result = claimPlayerBattlePassMilestone(
+      this.player, milestone, undefined, this.now()
+    );
+    this.player = result.player;
+    this.render();
+    this.view.renderBattlePass?.(this.player, this.now());
+    this.view.announceBattlePass?.(result.status === "claimed"
+      ? `${result.item.reward} gold claimed from milestone ${result.item.milestone}`
+      : result.status === "locked"
+        ? `Milestone ${milestone} is not reached yet`
+        : "That milestone is unavailable");
+  }
+
   leaveLeaderboard() {
     this.view.stopLeaderboard?.();
     this.view.showHome({ focusLeaderboard: true });
@@ -435,6 +465,7 @@ export class GameController {
     if (matchWinner) {
       this.player = updatePlayerAfterMatch(this.player, state.winner, undefined, this.now());
       if (state.winner === "X") {
+        this.player = awardPlayerBattlePassPoint(this.player, this.now());
         this.player = awardCoins(
           this.player,
           this.player.win_streak === 3 ? 4 : 3,
