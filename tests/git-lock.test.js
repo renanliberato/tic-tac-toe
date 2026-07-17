@@ -51,11 +51,16 @@ describe("git merge lock", () => {
       "(sleep 0.2; rm -f -- \"$1\") & exec ./git-sync",
       "git-lock-test",
       lock
-    ], { cwd: repository, encoding: "utf8" });
+    ], {
+      cwd: repository,
+      encoding: "utf8",
+      env: { ...env, GIT_WORKTREE_MERGE_LOCK_TIMEOUT: "999999999999999999999999999999999999999999" }
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("git-sync: git pull --rebase failed without leaving a conflict to resolve");
     expect(result.stderr).not.toContain("another merge holds");
+    expect(result.stderr).not.toContain("integer expression expected");
   }, 15000);
 
   it("fails clearly instead of waiting forever on a stale merge lock", () => {
@@ -70,12 +75,12 @@ describe("git merge lock", () => {
     const result = spawnSync("./git-sync", {
       cwd: repository,
       encoding: "utf8",
-      env: { ...env, GIT_WORKTREE_MERGE_LOCK_TIMEOUT: "1" }
+      env: { ...env, GIT_WORKTREE_MERGE_LOCK_TIMEOUT: "0000000000000000000000000000000000000000001" }
     });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("git-sync: timed out after 1 seconds waiting for merge lock");
     expect(readFileSync(lock, "utf8")).toBe("abandoned process
 ");
-  });
+  }, 10000);
 });

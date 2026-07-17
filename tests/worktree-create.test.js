@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
-import { cwd } from "node:process";
+import { cwd, env } from "node:process";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -67,10 +67,15 @@ describe("git-worktree-create", () => {
       "(sleep 0.2; rm -f -- \"$1\") & exec ./git-worktree-create",
       "worktree-create-test",
       lock
-    ], { cwd: repository, encoding: "utf8" });
+    ], {
+      cwd: repository,
+      encoding: "utf8",
+      env: { ...env, GIT_WORKTREE_MERGE_LOCK_TIMEOUT: "999999999999999999999999999999999999999999" }
+    });
 
     expect(result.status).toBe(0);
     expect(result.stderr).not.toContain("another merge holds");
+    expect(result.stderr).not.toContain("integer expression expected");
     expect(worktreeCount(repository)).toBe(2);
   }, 30000);
 
