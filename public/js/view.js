@@ -93,14 +93,12 @@ export class GameView {
       cell.disabled = !gameStarted || Boolean(mark) || Boolean(state.winner) || state.draw;
     });
 
-    const feedback = state.winner
-      ? `Player ${state.winner} wins!`
-      : state.draw
-        ? "It\'s a draw!"
-        : "";
+    const feedback = state.draw ? "It\'s a draw!" : "";
     this.status.textContent = feedback;
     if (this.turnAnnouncement) {
-      this.turnAnnouncement.textContent = feedback || (gameStarted ? `Player ${state.player}\'s turn` : "");
+      this.turnAnnouncement.textContent = feedback || (gameStarted && !state.winner
+        ? `Player ${state.player}\'s turn`
+        : "");
     }
     this.status.classList.toggle("status--winner", Boolean(state.winner));
     this.status.classList.toggle("status--draw", state.draw);
