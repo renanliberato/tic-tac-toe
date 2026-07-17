@@ -19,6 +19,12 @@
                 <span id="coin-amount" data-coin-amount class="coin-amount">0000</span>
                 <span class="coin-plus" aria-hidden="true" tabindex="-1">+</span>
             </div>
+            <button id="daily-gifts-launcher" class="daily-gifts-launcher" type="button" aria-label="Daily gifts">
+                <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                    <path d="M14 12h36a6 6 0 0 1 6 6v34H8V18a6 6 0 0 1 6-6Z" />
+                    <path d="M8 24h48M20 7v11M44 7v11M18 33h8v7h-8zm20 0h8v7h-8zM18 44h8v7h-8z" />
+                </svg>
+            </button>
             <p id="coin-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
             <h2 id="home-title">TIC TAC TOE</h2>
 
@@ -69,6 +75,16 @@
                 <span class="winning-line" data-winning-line aria-hidden="true" hidden></span>
             </div>
         </section>
+
+
+        <dialog id="daily-gifts-dialog" class="daily-gifts-dialog" aria-labelledby="daily-gifts-title" aria-describedby="daily-gifts-description">
+            <div class="daily-gifts-content">
+                <h2 id="daily-gifts-title">Daily Gifts</h2>
+                <div id="daily-gifts-grid" class="daily-gifts-grid" aria-label="Seven day gift progress"></div>
+                <p id="daily-gifts-description"></p>
+                <button id="daily-gifts-action" type="button">Claim</button>
+            </div>
+        </dialog>
 
         <dialog id="matchmaking-dialog" class="matchmaking-dialog" aria-labelledby="matchmaking-title" aria-describedby="matchmaking-message">
             <div class="matchmaking-content">
