@@ -57,6 +57,18 @@ body {
   white-space: nowrap;
 }
 
+.game .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .game .screen {
   width: min(100%, var(--content-width));
   margin: 0 auto;
@@ -201,6 +213,17 @@ body {
   padding: 20px 24px;
   border: 2px solid currentColor;
   border-radius: 16px;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.game .player-card--active[data-player="local"] {
+  border-color: #b42318;
+  box-shadow: 0 0 0 4px rgb(180 35 24 / .2);
+}
+
+.game .player-card--active[data-player="opponent"] {
+  border-color: #175cd3;
+  box-shadow: 0 0 0 4px rgb(23 92 211 / .2);
 }
 
 .game .player-card[hidden] {

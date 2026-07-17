@@ -40,7 +40,12 @@ beforeEach(() => {
   dom = new JSDOM(`
     <main class="game">
       <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
-      <section id="game-screen" hidden>
+      <section id="game-screen" aria-labelledby="turn-announcement" hidden>
+        <div class="players">
+          <div class="player-card" data-player="local" data-mark="X"><strong id="player-name"></strong></div>
+          <div class="player-card" data-player="opponent" data-mark="O" hidden><strong id="opponent-name"></strong></div>
+        </div>
+        <p id="turn-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
         <p id="status" class="status"></p>
         <div class="board" aria-label="Tic-Tac-Toe board">${cellsMarkup}</div>
       </section>
@@ -214,13 +219,20 @@ describe("game entry point", () => {
 
     expect(document.querySelector("#home-screen").hidden).toBe(true);
     expect(document.querySelector("#game-screen").hidden).toBe(false);
-    expect(document.querySelector("#status").textContent).toBe("Player X's turn");
+    expect(document.querySelector("#status").textContent).toBe("");
+    expect(document.querySelector("#turn-announcement").textContent).toBe("Player X's turn");
+    expect(document.querySelector("#game-screen").getAttribute("aria-labelledby")).toBe("turn-announcement");
+    expect(document.querySelector("[data-player=\"local\"]").classList.contains("player-card--active")).toBe(true);
+    expect(document.querySelector("[data-player=\"opponent\"]").classList.contains("player-card--active")).toBe(false);
     expect([...document.querySelectorAll("[data-cell]")].every((cell) => !cell.disabled)).toBe(true);
     expect(document.activeElement).toBe(document.querySelector("[data-cell=\"0\"]"));
 
     document.querySelector("[data-cell=\"0\"]").click();
 
     expect(document.querySelector("[data-cell=\"0\"]").dataset.mark).toBe("X");
+    expect(document.querySelector("#turn-announcement").textContent).toBe("Player O's turn");
+    expect(document.querySelector("[data-player=\"local\"]").classList.contains("player-card--active")).toBe(false);
+    expect(document.querySelector("[data-player=\"opponent\"]").classList.contains("player-card--active")).toBe(true);
     expect(document.querySelector("[data-cell=\"0\"]").getAttribute("aria-label")).toBe("Cell 1, X");
     expect(document.querySelector("[data-cell=\"0\"]").classList.contains("cell--placed")).toBe(true);
     expect(document.querySelector("#status").classList.contains("status--updated")).toBe(true);

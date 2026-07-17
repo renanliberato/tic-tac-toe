@@ -11,8 +11,11 @@ Feature: Playing a game of tic-tac-toe
     When I click the "Start game" button
     Then the home screen is hidden
     And the game board is visible
+    And the first board cell has focus
     And all board cells are enabled
-    And the status says "Player X's turn"
+    And the local player card indicates the active turn
+    And the turn announcement says "Player X's turn"
+    And the status says ""
 
   Scenario: Matchmaking completes before the game board is available
     Given I open the tic-tac-toe game
@@ -30,7 +33,15 @@ Feature: Playing a game of tic-tac-toe
     Given I open the tic-tac-toe game
     When I click the "Start game" button
     Then all board cells are empty
-    And the status says "Player X's turn"
+    And the local player card indicates the active turn
+    And the turn announcement says "Player X's turn"
+    And the status says ""
+
+  Scenario: The initial turn announcement is rendered once
+    Given I open the tic-tac-toe game
+    When I watch the turn announcement
+    And I click the "Start game" button
+    Then the turn announcement changes once
 
   Scenario: A game identifies both players by friendly names
     Given I open the tic-tac-toe game
@@ -42,11 +53,13 @@ Feature: Playing a game of tic-tac-toe
     Given I open the tic-tac-toe game
     When I click the "Start game" button
     And I click cell 1
+    Then the turn announcement says "Player O's turn"
     And I click cell 4
     And I click cell 2
     And I click cell 5
     And I click cell 3
     Then the status says "Player X wins!"
+    And the turn announcement says "Player X wins!"
     And the board contains "X" in cells 1, 2, and 3
     And the winning cells are highlighted
     And the result dialog is hidden
@@ -127,7 +140,8 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 1
     And I click cell 1
     Then cell 1 contains "X"
-    And the status says "Player O's turn"
+    And the opponent player card indicates the active turn
+    And the status says ""
 
   Scenario: Continuing after a win returns to the home screen
     Given I open the tic-tac-toe game
@@ -158,6 +172,7 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 7
     And I click cell 9
     Then the status says "It's a draw!"
+    And the turn announcement says "It's a draw!"
     And the result dialog says "Draw"
     And the result dialog detail says "No spaces left on the board."
     And player statistics include:

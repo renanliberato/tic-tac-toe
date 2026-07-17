@@ -44,6 +44,7 @@ setWorldConstructor(AppWorld);
 After(function () {
   if (!this.dom) return;
 
+  this.turnAnnouncementObserver?.disconnect();
   this.dom.window.close();
   globalThis.setTimeout = this.nativeSetTimeout;
   delete globalThis.window;
@@ -69,6 +70,16 @@ When("I start matchmaking", function () {
   const button = this.dom.window.document.querySelector("#start-game");
   assert.ok(button, "The Start game button does not exist");
   button.click();
+});
+
+When("I watch the turn announcement", function () {
+  const announcement = this.dom.window.document.querySelector("#turn-announcement");
+  assert.ok(announcement, "The turn announcement does not exist");
+  this.turnAnnouncementChanges = 0;
+  this.turnAnnouncementObserver = new this.dom.window.MutationObserver((mutations) => {
+    this.turnAnnouncementChanges += mutations.length;
+  });
+  this.turnAnnouncementObserver.observe(announcement, { childList: true, characterData: true, subtree: true });
 });
 
 When("matchmaking completes", async function () {
@@ -145,6 +156,10 @@ Then("the opponent card shows a friendly name", function () {
   assert.match(name, /^[A-Za-z]+$/);
 });
 
+Then("the first board cell has focus", function () {
+  assert.equal(this.dom.window.document.activeElement, this.cell(1));
+});
+
 Then("all board cells are enabled", function () {
   assert.ok(this.cells().every((cell) => !cell.disabled));
 });
@@ -153,8 +168,23 @@ Then("all board cells are empty", function () {
   assert.deepEqual(this.cells().map((cell) => cell.textContent), Array(9).fill(""));
 });
 
+Then("the {word} player card indicates the active turn", function (player) {
+  const card = this.dom.window.document.querySelector(`[data-player="${player}"]`);
+  assert.ok(card, `The ${player} player card does not exist`);
+  assert.equal(card.classList.contains("player-card--active"), true);
+  assert.equal(card.getAttribute("aria-current"), "true");
+});
+
 Then("the status says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#status").textContent, expected);
+});
+
+Then("the turn announcement says {string}", function (expected) {
+  assert.equal(this.dom.window.document.querySelector("#turn-announcement").textContent, expected);
+});
+
+Then("the turn announcement changes once", function () {
+  assert.equal(this.turnAnnouncementChanges, 1);
 });
 
 Then("cell {int} contains {string}", function (number, expected) {
