@@ -1,4 +1,8 @@
+import { createOpponent, createUuid, getNameForId } from "./identity.js";
+
 export const PLAYER_STORAGE_KEY = "tic-tac-toe-player";
+
+export { createOpponent, createUuid, getNameForId };
 
 let memoryPlayer = null;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -23,23 +27,12 @@ function getStorage(storage) {
   return null;
 }
 
-function createUuid() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-
-  const uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (character) => {
-    const value = Math.floor(Math.random() * 16);
-    const nibble = character === "x" ? value : (value & 0x3) | 0x8;
-    return nibble.toString(16);
-  });
-
-  return uuid;
-}
-
 function newPlayer() {
+  const player_id = createUuid();
+
   return {
-    player_id: createUuid(),
+    player_id,
+    player_name: getNameForId(player_id),
     games_played: 0,
     moves_played: 0,
     wins: 0,
@@ -63,6 +56,7 @@ function asCount(value) {
 function normalizePlayer(value) {
   return {
     player_id: value.player_id,
+    player_name: getNameForId(value.player_id),
     games_played: asCount(value.games_played),
     moves_played: asCount(value.moves_played),
     wins: asCount(value.wins),
@@ -104,8 +98,8 @@ export function getOrCreatePlayer(storage) {
   const storedPlayer = readPlayer(resolvedStorage);
 
   if (storedPlayer) {
-    memoryPlayer = storedPlayer;
-    return storedPlayer;
+    memoryPlayer = savePlayer(storedPlayer, resolvedStorage);
+    return memoryPlayer;
   }
 
   if (!resolvedStorage && memoryPlayer) return memoryPlayer;

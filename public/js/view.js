@@ -27,6 +27,9 @@ export class GameView {
     this.cells = [...documentRef.querySelectorAll("[data-cell]")];
     this.board = documentRef.querySelector(".board");
     this.status = documentRef.querySelector("#status");
+    this.playerName = documentRef.querySelector("#player-name");
+    this.opponentName = documentRef.querySelector("#opponent-name");
+    this.opponentPanel = documentRef.querySelector("[data-player=\"opponent\"]");
     this.matchmakingDialog = documentRef.querySelector("#matchmaking-dialog");
     this.resultDialog = documentRef.querySelector("#result-dialog");
     this.resultMessage = documentRef.querySelector("#result-message");
@@ -71,7 +74,8 @@ export class GameView {
     this.preventDialogDismissal(this.resultDialog);
   }
 
-  render(state, gameStarted, winningLine = []) {
+  render(state, gameStarted, winningLine = [], player = null, opponent = null) {
+    this.renderPlayers(player, opponent);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
       cell.textContent = mark;
@@ -98,6 +102,17 @@ export class GameView {
     if (this.winningLineElement) {
       this.winningLineElement.hidden = !state.winner;
       if (state.winner) this.setWinningLine(this.winningLineElement, winningLine);
+    }
+  }
+
+  renderPlayers(player, opponent) {
+    if (this.playerName) this.playerName.textContent = player?.player_name || "You";
+    if (this.opponentName) this.opponentName.textContent = opponent?.opponent_name || "";
+
+    if (this.opponentPanel) {
+      this.opponentPanel.hidden = !opponent;
+      this.opponentPanel.dataset.playerId = opponent?.opponent_id || "";
+      this.opponentPanel.dataset.opponentId = opponent?.opponent_id || "";
     }
   }
 

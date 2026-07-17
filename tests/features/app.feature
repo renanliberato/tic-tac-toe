@@ -32,6 +32,12 @@ Feature: Playing a game of tic-tac-toe
     Then all board cells are empty
     And the status says "Player X's turn"
 
+  Scenario: A game identifies both players by friendly names
+    Given I open the tic-tac-toe game
+    When I click the "Start game" button
+    Then the local player card shows a friendly name
+    And the opponent card shows a friendly name
+
   Scenario: Players can take turns and X can win
     Given I open the tic-tac-toe game
     When I click the "Start game" button
