@@ -153,6 +153,13 @@ Then("all board cells are empty", function () {
   assert.deepEqual(this.cells().map((cell) => cell.textContent), Array(9).fill(""));
 });
 
+Then("the {word} player card indicates the active turn", function (player) {
+  const card = this.dom.window.document.querySelector(`[data-player="${player}"]`);
+  assert.ok(card, `The ${player} player card does not exist`);
+  assert.equal(card.classList.contains("player-card--active"), true);
+  assert.equal(card.getAttribute("aria-current"), "true");
+});
+
 Then("the status says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#status").textContent, expected);
 });

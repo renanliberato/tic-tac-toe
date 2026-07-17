@@ -268,6 +268,10 @@ describe("game screen layout", () => {
     expect(gameScreenRule).toMatch(/(?:^|\n)\s*align-items:\s*center\s*;/);
     expect(gameScreenRule).toMatch(/(?:^|\n)\s*justify-content:\s*center\s*;/);
 
+    const activePlayerRule = styles.match(/\.game \.player-card--active\[data-player="local"\]\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(activePlayerRule).toMatch(/(?:^|\n)\s*border-color:\s*#b42318\s*;/);
+    expect(activePlayerRule).toMatch(/(?:^|\n)\s*box-shadow:/);
+
     const statusRule = styles.match(/\.game #game-screen \.status\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(statusRule).toMatch(/(?:^|\n)\s*position:\s*absolute\s*;/);
     expect(statusRule).toMatch(/(?:^|\n)\s*bottom:\s*calc\(50% \+ var\(--board-half-width\) \+ 64px\)\s*;/);

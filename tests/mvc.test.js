@@ -202,6 +202,34 @@ describe("MVC game architecture", () => {
     expect(winningLine.style.getPropertyValue("--winning-line-angle")).toBe("0rad");
   });
 
+  it("uses player-card borders to indicate the active turn", () => {
+    const dom = createViewDocument();
+    const documentRef = dom.window.document;
+    const view = new GameView(documentRef);
+    const localCard = documentRef.querySelector("[data-player=\"local\"]");
+    const opponentCard = documentRef.querySelector("[data-player=\"opponent\"]");
+
+    const emptyBoard = Array(9).fill(null);
+    view.render({ board: emptyBoard, player: "X", winner: null, draw: false }, true, [],
+      { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
+    expect(documentRef.querySelector("#status").textContent).toBe("");
+    expect(localCard.classList.contains("player-card--active")).toBe(true);
+    expect(localCard.getAttribute("aria-current")).toBe("true");
+    expect(opponentCard.classList.contains("player-card--active")).toBe(false);
+
+    view.render({ board: ["X", null, null, null, null, null, null, null, null], player: "O", winner: null, draw: false }, true, [],
+      { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
+    expect(localCard.classList.contains("player-card--active")).toBe(false);
+    expect(localCard.hasAttribute("aria-current")).toBe(false);
+    expect(opponentCard.classList.contains("player-card--active")).toBe(true);
+    expect(opponentCard.getAttribute("aria-current")).toBe("true");
+
+    view.render({ board: ["X", "X", "X", "O", null, null, null, null, null], player: "X", winner: "X", draw: false }, true, [0, 1, 2],
+      { player_name: "PixelPilot" }, { opponent_id: "opponent", opponent_name: "Ace" });
+    expect(localCard.classList.contains("player-card--active")).toBe(false);
+    expect(opponentCard.classList.contains("player-card--active")).toBe(false);
+  });
+
   it("prevents dialog dismissal and supplies result feedback", () => {
     const dom = createViewDocument();
     const documentRef = dom.window.document;

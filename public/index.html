@@ -33,16 +33,16 @@
 
         <section id="game-screen" class="screen" aria-labelledby="status" hidden>
             <div class="players" aria-label="Players">
-                <div class="player-card" data-player="local">
+                <div class="player-card" data-player="local" data-mark="X">
                     <span class="player-role">You</span>
                     <strong id="player-name">You</strong>
                 </div>
-                <div class="player-card" data-player="opponent" hidden>
+                <div class="player-card" data-player="opponent" data-mark="O" hidden>
                     <span class="player-role">Opponent</span>
                     <strong id="opponent-name"></strong>
                 </div>
             </div>
-            <p id="status" class="status" role="status">Player X's turn</p>
+            <p id="status" class="status" role="status"></p>
             <div class="board" aria-label="Tic-Tac-Toe board">
                 <button class="cell" type="button" data-cell="0" aria-label="Cell 1"></button>
                 <button class="cell" type="button" data-cell="1" aria-label="Cell 2"></button>

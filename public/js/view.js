@@ -27,6 +27,7 @@ export class GameView {
     this.cells = [...documentRef.querySelectorAll("[data-cell]")];
     this.board = documentRef.querySelector(".board");
     this.status = documentRef.querySelector("#status");
+    this.playerPanel = documentRef.querySelector("[data-player=\"local\"]");
     this.playerName = documentRef.querySelector("#player-name");
     this.opponentName = documentRef.querySelector("#opponent-name");
     this.opponentPanel = documentRef.querySelector("[data-player=\"opponent\"]");
@@ -75,7 +76,7 @@ export class GameView {
   }
 
   render(state, gameStarted, winningLine = [], player = null, opponent = null) {
-    this.renderPlayers(player, opponent);
+    this.renderPlayers(player, opponent, state, gameStarted);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
       cell.textContent = mark;
@@ -92,7 +93,7 @@ export class GameView {
       ? `Player ${state.winner} wins!`
       : state.draw
         ? "It\'s a draw!"
-        : `Player ${state.player}\'s turn`;
+        : "";
     this.status.classList.toggle("status--winner", Boolean(state.winner));
     this.status.classList.toggle("status--draw", state.draw);
     this.board?.classList.toggle("board--winner", Boolean(state.winner));
@@ -105,7 +106,7 @@ export class GameView {
     }
   }
 
-  renderPlayers(player, opponent) {
+  renderPlayers(player, opponent, state, gameStarted) {
     if (this.playerName) this.playerName.textContent = player?.player_name || "You";
     if (this.opponentName) this.opponentName.textContent = opponent?.opponent_name || "";
 
@@ -113,6 +114,26 @@ export class GameView {
       this.opponentPanel.hidden = !opponent;
       this.opponentPanel.dataset.playerId = opponent?.opponent_id || "";
       this.opponentPanel.dataset.opponentId = opponent?.opponent_id || "";
+    }
+
+    const turnIsActive = gameStarted && !state?.winner && !state?.draw;
+    this.setTurnIndicator(this.playerPanel, turnIsActive && state?.player === this.getPanelMark(this.playerPanel, "X"));
+    this.setTurnIndicator(this.opponentPanel, turnIsActive && Boolean(opponent)
+      && state?.player === this.getPanelMark(this.opponentPanel, "O"));
+  }
+
+  getPanelMark(panel, fallback) {
+    return panel?.dataset.mark || fallback;
+  }
+
+  setTurnIndicator(panel, isActive) {
+    if (!panel) return;
+
+    panel.classList.toggle("player-card--active", isActive);
+    if (isActive) {
+      panel.setAttribute("aria-current", "true");
+    } else {
+      panel.removeAttribute("aria-current");
     }
   }
 

@@ -12,7 +12,8 @@ Feature: Playing a game of tic-tac-toe
     Then the home screen is hidden
     And the game board is visible
     And all board cells are enabled
-    And the status says "Player X's turn"
+    And the local player card indicates the active turn
+    And the status says ""
 
   Scenario: Matchmaking completes before the game board is available
     Given I open the tic-tac-toe game
@@ -30,7 +31,8 @@ Feature: Playing a game of tic-tac-toe
     Given I open the tic-tac-toe game
     When I click the "Start game" button
     Then all board cells are empty
-    And the status says "Player X's turn"
+    And the local player card indicates the active turn
+    And the status says ""
 
   Scenario: A game identifies both players by friendly names
     Given I open the tic-tac-toe game
@@ -127,7 +129,8 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 1
     And I click cell 1
     Then cell 1 contains "X"
-    And the status says "Player O's turn"
+    And the opponent player card indicates the active turn
+    And the status says ""
 
   Scenario: Continuing after a win returns to the home screen
     Given I open the tic-tac-toe game
