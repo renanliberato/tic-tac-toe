@@ -10,9 +10,15 @@ const htmlPath = path.join(root, "public/index.html");
 const mainPath = path.join(root, "public/js/main.js");
 
 class AppWorld {
-  async openGame() {
+  async openGame(player = null) {
     const html = await fs.readFile(htmlPath, "utf8");
     this.dom = new JSDOM(html, { url: "http://localhost/" });
+    if (player) {
+      this.dom.window.localStorage.setItem("tic-tac-toe-player", JSON.stringify({
+        player_id: "123e4567-e89b-42d3-a456-426614174000",
+        ...player
+      }));
+    }
     globalThis.window = this.dom.window;
     globalThis.document = this.dom.window.document;
     this.nativeSetTimeout = globalThis.setTimeout;
@@ -60,6 +66,11 @@ After(function () {
 
 Given("I open the tic-tac-toe game", async function () {
   await this.openGame();
+  assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
+});
+
+Given("I open the game with a win streak of {int}", async function (streak) {
+  await this.openGame({ win_streak: streak });
   assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
 });
 
@@ -185,6 +196,20 @@ When("the coin celebration completes", async function () {
 
 Then("the coin balance shows {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#coin-amount").textContent, expected);
+});
+
+Then("the home win streak shows {int} filled flames", function (expected) {
+  const streak = this.dom.window.document.querySelector("[data-win-streak]");
+  const flames = [...streak.querySelectorAll("[data-streak-flame]")];
+  assert.equal(streak.dataset.streak, String(expected));
+  assert.equal(
+    flames.filter((flame) => flame.classList.contains("streak-flame--filled")).length,
+    expected
+  );
+  assert.equal(
+    streak.querySelector("[data-win-streak-status]").textContent,
+    `Win streak: ${expected} of 3`
+  );
 });
 
 Then("the coin holder has accessibility label {string}", function (expected) {

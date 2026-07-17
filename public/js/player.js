@@ -42,6 +42,7 @@ function newPlayer() {
     losses: 0,
     coin_balance: 0,
     pending_coins: 0,
+    win_streak: 0,
     last_move: null,
     leaderboard_cycle: null,
     leaderboard_score: 0,
@@ -59,6 +60,10 @@ function isPlayer(value) {
 
 function asCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function asWinStreak(value) {
+  return Math.min(asCount(value), 3);
 }
 
 function normalizeOwnedStyles(value) {
@@ -82,6 +87,7 @@ export function normalizePlayer(value, timestamp = Date.now()) {
     losses: asCount(value.losses),
     coin_balance: asCount(value.coin_balance),
     pending_coins: asCount(value.pending_coins),
+    win_streak: asWinStreak(value.win_streak),
     last_move: value.last_move ?? null,
     leaderboard_cycle: cycle ? cycle.index : null,
     leaderboard_score: cycleMatches ? asCount(value.leaderboard_score) : 0,
@@ -180,6 +186,16 @@ export function updatePlayerAfterMove(player, game, index, storage, timestamp = 
     ...current,
     moves_played: asCount(player.moves_played) + 1,
     last_move: { cell: index, mark }
+  }, storage, timestamp);
+}
+
+/** Persist the displayed streak when an overall first-to-three match ends. */
+export function updatePlayerAfterMatch(player, winner, storage, timestamp = Date.now()) {
+  if (winner !== "X" && winner !== "O") return player;
+
+  return savePlayer({
+    ...player,
+    win_streak: winner === "X" ? Math.min(asWinStreak(player.win_streak) + 1, 3) : 0
   }, storage, timestamp);
 }
 

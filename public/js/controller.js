@@ -7,6 +7,7 @@ import {
   startPlayerGame,
   updatePlayerAfterMove,
   updatePlayerAfterResult,
+  updatePlayerAfterMatch,
   awardCoins,
   consumePendingCoins,
   activatePlayerStyle
@@ -294,8 +295,16 @@ export class GameController {
         this.player = awardLeaderboardPoint(this.player, this.now());
       }
     }
-    if (matchWinner && state.winner === "X") {
-      this.player = awardCoins(this.player, 3, undefined, this.now());
+    if (matchWinner) {
+      this.player = updatePlayerAfterMatch(this.player, state.winner, undefined, this.now());
+      if (state.winner === "X") {
+        this.player = awardCoins(
+          this.player,
+          this.player.win_streak === 3 ? 4 : 3,
+          undefined,
+          this.now()
+        );
+      }
     }
     this.resultRecorded = true;
     this.render();
