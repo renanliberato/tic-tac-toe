@@ -127,6 +127,31 @@ describe("refine", () => {
     expect(readFileSync(count, "utf8")).toBe("3");
   });
 
+  it("answers every question automatically with recommendations and confirms the final round", () => {
+    const bin = fakeAgent();
+    const log = path.join(bin, "prompts.log");
+    const count = path.join(bin, "count");
+    const result = spawnSync("./refine", ["--auto", "Improve the game"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_LOG: log, REFINE_COUNT: count, REFINE_MODEL: "test:model" },
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).not.toContain("Your answer:");
+    expect(result.stdout).toContain("Auto-answer: New players, for accessibility.");
+    expect(result.stdout).toContain("Auto-answer: yes");
+    expect(result.stdout).toMatch(/Refinement finished: \.\/tasks\/[a-f0-9]{6}-todo\.md/);
+
+    const taskPath = result.stdout.match(/\.\/(tasks\/[a-f0-9]{6}-todo\.md)/)[1];
+    generatedTasks.push(path.join(root, taskPath));
+    const prompts = readFileSync(log, "utf8");
+    expect(prompts).toContain("\"answer\": \"New players, for accessibility.\"");
+    expect(prompts).toContain("\"answer\": \"yes\"");
+    expect(prompts).toContain("\"confirmed\": true");
+    expect(readFileSync(count, "utf8")).toBe("3");
+  });
+
   it("rejects an unrelated question tagged as final confirmation", () => {
     const bin = unrelatedConfirmationAgent();
     const count = path.join(bin, "count");
@@ -160,6 +185,6 @@ describe("refine", () => {
   it("prints usage without a prompt", () => {
     const result = spawnSync("./refine", [], { cwd: root, encoding: "utf8" });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("usage: ./refine PROMPT");
+    expect(result.stderr).toContain("usage: ./refine [--auto] PROMPT");
   });
 });
