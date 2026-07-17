@@ -431,11 +431,11 @@ body {
 }
 
 .game .matchmaking-dialog {
-  font-size: 16px;
+  font-size: 21px;
 }
 
 .game .matchmaking-dialog h2 {
-  font-size: 28px;
+  font-size: 36px;
 }
 
 .game dialog button {

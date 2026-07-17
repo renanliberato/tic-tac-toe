@@ -215,9 +215,9 @@ describe("rendered dialog layout", () => {
 
 
 describe("matchmaking dialog typography", () => {
-  it("uses half-sized text without changing the shared dialog typography", () => {
-    expect(styles).toMatch(/\.game \.matchmaking-dialog\s*\{[^}]*font-size:\s*16px/s);
-    expect(styles).toMatch(/\.game \.matchmaking-dialog h2\s*\{[^}]*font-size:\s*28px/s);
+  it("uses enlarged text without changing the shared dialog typography", () => {
+    expect(styles).toMatch(/\.game \.matchmaking-dialog\s*\{[^}]*font-size:\s*21px/s);
+    expect(styles).toMatch(/\.game \.matchmaking-dialog h2\s*\{[^}]*font-size:\s*36px/s);
     expect(styles).toMatch(/\.game dialog\s*\{[^}]*font-size:\s*32px/s);
     expect(styles).toMatch(/\.game dialog h2\s*\{[^}]*font-size:\s*56px/s);
   });
