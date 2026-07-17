@@ -54,16 +54,60 @@ describe("leaderboard view and navigation", () => {
     view.stopLeaderboard();
   });
 
-  it("jumps and focuses the real local row with reduced-motion behavior", () => {
+  it("places the floating row below the leaderboard border", () => {
+    const styles = readFileSync(new URL("../public/css/styles.css", import.meta.url), "utf8");
+    expect(styles).toMatch(/\.game \.leaderboard-floating \{[\s\S]*?bottom: 16px;/);
+  });
+
+  it("centers and focuses the real local row with reduced-motion behavior", () => {
     const dom = createDom();
     dom.window.matchMedia = () => ({ matches: true });
     const view = new GameView(dom.window.document);
     view.showLeaderboard(player, LEADERBOARD_EPOCH + 6.9 * 86_400_000);
+    const list = dom.window.document.querySelector("#leaderboard-list");
     const row = dom.window.document.querySelector("#leaderboard-local-row");
+    const floating = dom.window.document.querySelector("#floating-local-row");
+    const scrollTo = vi.fn(({ top }) => { list.scrollTop = top; });
+    list.scrollTo = scrollTo;
+    list.getBoundingClientRect = () => ({ top: 100, height: 400, bottom: 500 });
+    row.getBoundingClientRect = () => ({ top: 680, height: 80, bottom: 760 });
+    Object.defineProperty(list, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(row, "offsetHeight", { configurable: true, value: 80 });
+    list.scrollTop = 40;
     row.scrollIntoView = vi.fn();
-    dom.window.document.querySelector("#floating-local-row").click();
-    expect(row.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "auto" });
+    const focus = vi.spyOn(row, "focus");
+    dom.window.document.documentElement.scrollTop = 37;
+    const pageScrollTop = dom.window.document.documentElement.scrollTop;
+    const pageScroll = vi.spyOn(dom.window, "scrollTo");
+
+    floating.click();
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 460, behavior: "auto" });
+    expect(row.scrollIntoView).not.toHaveBeenCalled();
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(dom.window.document.activeElement).toBe(row);
+    expect(dom.window.document.documentElement.scrollTop).toBe(pageScrollTop);
+    expect(pageScroll).not.toHaveBeenCalled();
+    view.stopLeaderboard();
+  });
+
+  it("requests smooth scrolling for normal-motion activation", () => {
+    const dom = createDom();
+    dom.window.matchMedia = () => ({ matches: false });
+    const view = new GameView(dom.window.document);
+    view.showLeaderboard(player, LEADERBOARD_EPOCH + 6.9 * 86_400_000);
+    const list = dom.window.document.querySelector("#leaderboard-list");
+    const row = dom.window.document.querySelector("#leaderboard-local-row");
+    const scrollTo = vi.fn();
+    list.scrollTo = scrollTo;
+    list.getBoundingClientRect = () => ({ top: 100, height: 400, bottom: 500 });
+    row.getBoundingClientRect = () => ({ top: 680, height: 80, bottom: 760 });
+    Object.defineProperty(list, "clientHeight", { configurable: true, value: 400 });
+    Object.defineProperty(row, "offsetHeight", { configurable: true, value: 80 });
+
+    dom.window.document.querySelector("#floating-local-row").click();
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 420, behavior: "smooth" });
     view.stopLeaderboard();
   });
 

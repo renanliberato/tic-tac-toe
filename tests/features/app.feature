@@ -117,6 +117,15 @@ Feature: Playing against the Computer
     And the home screen is visible
     And the leaderboard button has focus
 
+  Scenario: The floating leaderboard row returns to the local position
+    Given I open the tic-tac-toe game
+    When I open the weekly leaderboard
+    And I prepare the leaderboard local row for scrolling
+    And I activate the floating local leaderboard row
+    Then the local leaderboard row has focus
+    And the leaderboard scrolls the local row to the center
+    And the page scroll position is unchanged
+
   Scenario: A player views their profile and buys and switches board styles
     Given I have a player profile with 20 coins and match statistics
     And I open the tic-tac-toe game
