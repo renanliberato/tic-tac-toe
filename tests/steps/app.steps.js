@@ -126,6 +126,25 @@ Then("the game board is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#game-screen").hidden, false);
 });
 
+Then("the local player card shows a friendly name", function () {
+  const card = this.dom.window.document.querySelector("[data-player=\"local\"]");
+  const name = this.dom.window.document.querySelector("#player-name").textContent.trim();
+
+  assert.ok(card, "The local player card does not exist");
+  assert.equal(card.hidden, false);
+  assert.match(name, /^[A-Za-z]+$/);
+  assert.notEqual(name, "You");
+});
+
+Then("the opponent card shows a friendly name", function () {
+  const card = this.dom.window.document.querySelector("[data-player=\"opponent\"]");
+  const name = this.dom.window.document.querySelector("#opponent-name").textContent.trim();
+
+  assert.ok(card, "The opponent card does not exist");
+  assert.equal(card.hidden, false);
+  assert.match(name, /^[A-Za-z]+$/);
+});
+
 Then("all board cells are enabled", function () {
   assert.ok(this.cells().every((cell) => !cell.disabled));
 });

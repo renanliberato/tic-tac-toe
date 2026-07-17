@@ -1,4 +1,5 @@
 import { getWinningLine } from "./game.js";
+import { createOpponent } from "./identity.js";
 import {
   getOrCreatePlayer,
   startPlayerGame,
@@ -20,6 +21,7 @@ export class GameController {
     this.gameStarted = false;
     this.matchmakingTimer = null;
     this.player = getOrCreatePlayer();
+    this.opponent = null;
     this.resultRecorded = false;
 
     this.model.subscribe(() => this.render());
@@ -39,7 +41,7 @@ export class GameController {
   render() {
     const state = this.model.getState();
     const winningLine = state.winner ? getWinningLine(state.board) || [] : [];
-    this.view.render(state, this.gameStarted, winningLine);
+    this.view.render(state, this.gameStarted, winningLine, this.player, this.opponent);
   }
 
   play(index) {
@@ -60,6 +62,7 @@ export class GameController {
     if (this.matchmakingTimer !== null) return;
 
     this.view.closeResultDialog();
+    this.opponent = createOpponent();
     this.gameStarted = false;
     this.model.reset();
     this.view.showMatchmaking();
@@ -78,6 +81,9 @@ export class GameController {
     this.view.resetFeedback();
     this.gameStarted = true;
     this.resultRecorded = false;
+    // startGame can also be called directly by an integration, so keep every
+    // actual game covered even when matchmaking was skipped.
+    this.opponent ||= createOpponent();
     this.player = startPlayerGame(this.player);
     this.model.reset();
     this.view.showGame();
@@ -86,6 +92,7 @@ export class GameController {
 
   showHome() {
     this.stopMatchmaking();
+    this.opponent = null;
     this.view.closeResultDialog();
     this.view.resetFeedback();
     this.gameStarted = false;

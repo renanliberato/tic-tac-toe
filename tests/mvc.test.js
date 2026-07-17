@@ -30,8 +30,8 @@ class FakeView {
 
   bindDialogGuards() {}
 
-  render(state, gameStarted, winningLine) {
-    this.rendered.push({ state, gameStarted, winningLine });
+  render(state, gameStarted, winningLine, player, opponent) {
+    this.rendered.push({ state, gameStarted, winningLine, player, opponent });
   }
 
   showMatchmaking() { this.actions.push("showMatchmaking"); }
@@ -58,6 +58,10 @@ function createViewDocument() {
     <main class="game">
       <section id="home-screen"><button id="start-game" type="button">Start game</button></section>
       <section id="game-screen" hidden>
+        <div class="players">
+          <div class="player-card" data-player="local"><strong id="player-name"></strong></div>
+          <div class="player-card" data-player="opponent" hidden><strong id="opponent-name"></strong></div>
+        </div>
         <p id="status" class="status"></p>
         <div class="board">${cells}<span data-winning-line hidden></span></div>
       </section>
@@ -110,9 +114,15 @@ describe("MVC game architecture", () => {
     view.startHandler();
     expect(scheduledTimers).toBe(1);
     expect(view.actions).toContain("showMatchmaking");
+    const opponent = view.rendered.at(-1).opponent;
+    expect(opponent.opponent_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(opponent.opponent_name).toBeTruthy();
 
     matchmakingCallback();
     expect(view.rendered.at(-1).gameStarted).toBe(true);
+    expect(view.rendered.at(-1).opponent).toEqual(opponent);
     expect(view.actions).toContain("showGame");
 
     for (const index of [0, 3, 1, 4, 2]) controller.play(index);
@@ -133,6 +143,11 @@ describe("MVC game architecture", () => {
     });
 
     controller.startGame();
+    const opponent = view.rendered.at(-1).opponent;
+    expect(opponent.opponent_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(opponent.opponent_name).toBeTruthy();
     for (const index of [0, 1, 2, 4, 3, 5, 7, 6, 8]) controller.play(index);
 
     expect(view.resultStates).toHaveLength(1);
@@ -164,8 +179,13 @@ describe("MVC game architecture", () => {
       player: "X",
       winner: "X",
       draw: false
-    }, true, [0, 1, 2]);
+    }, true, [0, 1, 2],
+    { player_name: "PixelPilot" },
+    { opponent_id: "123e4567-e89b-42d3-a456-426614174000", opponent_name: "Ace" });
 
+    expect(documentRef.querySelector("#player-name").textContent).toBe("PixelPilot");
+    expect(documentRef.querySelector("#opponent-name").textContent).toBe("Ace");
+    expect(documentRef.querySelector("[data-player=\"opponent\"]").hidden).toBe(false);
     expect([...view.cells].map((cell) => cell.textContent)).toEqual([
       "X", "X", "X", "O", "", "", "", "", ""
     ]);
