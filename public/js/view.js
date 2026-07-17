@@ -1,6 +1,7 @@
 import { applyPageScale } from "./layout.js";
 import { createStandings, getCycle } from "./leaderboard.js";
 import { PLAYER_STORAGE_KEY } from "./player.js";
+import { BOARD_STYLES, getBoardStyle, styleTokens } from "./board-styles.js";
 
 const WINNING_LINE_DURATION = 700;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -43,6 +44,23 @@ export class GameView {
     this.leaderboardList = documentRef.querySelector("#leaderboard-list");
     this.leaderboardMessage = documentRef.querySelector("#leaderboard-message");
     this.floatingLocalRow = documentRef.querySelector("#floating-local-row");
+    this.profileScreen = documentRef.querySelector("#profile-screen");
+    this.stylesScreen = documentRef.querySelector("#styles-screen");
+    this.profileButton = documentRef.querySelector("#open-profile");
+    this.profileBack = documentRef.querySelector("#profile-back");
+    this.profileHeading = documentRef.querySelector("#profile-title");
+    this.profileName = documentRef.querySelector("#profile-name");
+    this.stylesButton = documentRef.querySelector("#open-styles");
+    this.stylesBack = documentRef.querySelector("#styles-back");
+    this.stylesHeading = documentRef.querySelector("#styles-title");
+    this.stylesGrid = documentRef.querySelector("#styles-grid");
+    this.stylesBalance = documentRef.querySelector("#styles-balance");
+    this.stylesBalanceAmount = documentRef.querySelector("[data-styles-balance]");
+    this.styleAnnouncement = documentRef.querySelector("#style-announcement");
+    this.insufficientDialog = documentRef.querySelector("#insufficient-dialog");
+    this.insufficientMessage = documentRef.querySelector("#insufficient-message");
+    this.insufficientOk = documentRef.querySelector("#insufficient-ok");
+    this.insufficientOpener = null;
     this.start = documentRef.querySelector("#start-game");
     this.coinHolder = documentRef.querySelector("#coin-holder");
     this.coinAmount = documentRef.querySelector("#coin-amount");
@@ -91,6 +109,7 @@ export class GameView {
       this.board.append(this.winningLineElement);
     }
 
+    this.bindInsufficientDialog();
     applyPageScale(this.gameRoot, documentRef.defaultView);
   }
 
@@ -104,6 +123,17 @@ export class GameView {
 
   onContinue(handler) {
     this.continueButton?.addEventListener("click", handler);
+  }
+
+  onProfile(handler) { this.profileButton?.addEventListener("click", handler); }
+  onProfileBack(handler) { this.profileBack?.addEventListener("click", handler); }
+  onStyles(handler) { this.stylesButton?.addEventListener("click", handler); }
+  onStylesBack(handler) { this.stylesBack?.addEventListener("click", handler); }
+  onStyle(handler) {
+    this.stylesGrid?.addEventListener("click", (event) => {
+      const tile = event.target.closest("[data-style-id]");
+      if (tile) handler(tile.dataset.styleId, tile);
+    });
   }
 
   onLeaderboardOpen(handler) {
@@ -131,6 +161,7 @@ export class GameView {
 
   render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null) {
     if (!this.coinPresentation) this.renderCoinBalance(player?.coin_balance ?? 0);
+    this.applyBoardStyle(player?.equipped_style);
     this.renderPlayers(player, opponent, state, gameStarted, matchScore);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
@@ -641,10 +672,11 @@ export class GameView {
 
   showHome(options = {}) {
     this.stopLeaderboard();
-    this.homeScreen.hidden = false;
+    [this.homeScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
+      .forEach((screen) => { if (screen) screen.hidden = screen !== this.homeScreen; });
     this.ensureHomeTitle();
-    this.gameScreen.hidden = true;
     if (options.focusLeaderboard) this.leaderboardEntry?.focus();
+    else if (options.focusProfile) this.profileButton?.focus();
     else this.start?.focus();
   }
 
@@ -658,6 +690,135 @@ export class GameView {
     this.stopLeaderboard();
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = false;
+  }
+
+  hideScreens(active) {
+    [this.homeScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
+      .forEach((screen) => { if (screen) screen.hidden = screen !== active; });
+  }
+
+  showProfile(player, options = {}) {
+    this.renderProfile(player);
+    this.hideScreens(this.profileScreen);
+    (options.focusStyles ? this.stylesButton : this.profileHeading)?.focus();
+  }
+
+  showStyles() {
+    this.hideScreens(this.stylesScreen);
+    this.stylesHeading?.focus();
+  }
+
+  renderProfile(player = {}) {
+    if (this.profileName) this.profileName.textContent = player.player_name || "";
+    const values = {
+      games_played: player.games_played ?? 0,
+      wins: player.wins ?? 0,
+      draws: player.draws ?? 0,
+      losses: player.losses ?? 0,
+      moves_played: player.moves_played ?? 0,
+      win_rate: `${player.games_played ? Math.round((player.wins || 0) / player.games_played * 100) : 0}%`
+    };
+    Object.entries(values).forEach(([key, value]) => {
+      const target = this.profileScreen?.querySelector(`[data-stat="${key}"]`);
+      if (target) target.textContent = String(value);
+    });
+  }
+
+  createMiniPreview(style) {
+    const preview = this.document.createElement("span");
+    preview.className = "style-preview";
+    preview.setAttribute("aria-hidden", "true");
+    preview.style.cssText = styleTokens(style);
+    ["X", "O", "", "", "X", "", "O", "", "X"].forEach((mark) => {
+      const cell = this.document.createElement("span");
+      cell.className = "style-preview-cell";
+      cell.dataset.mark = mark;
+      if (mark) cell.append(this.createMarkIcon(mark));
+      preview.append(cell);
+    });
+    return preview;
+  }
+
+  renderStyles(player = {}) {
+    const balance = Number.isInteger(player.coin_balance) ? player.coin_balance : 0;
+    if (this.stylesBalanceAmount) this.stylesBalanceAmount.textContent = formatCoinBalance(balance);
+    this.stylesBalance?.setAttribute("aria-label", `Coin balance: ${balance}`);
+    if (!this.stylesGrid) return;
+
+    const owned = Array.isArray(player.owned_styles) ? player.owned_styles : ["classic"];
+    const catalogIds = new Set(BOARD_STYLES.map((style) => style.id));
+    this.stylesGrid.querySelectorAll("[data-style-id]").forEach((tile) => {
+      if (!catalogIds.has(tile.dataset.styleId)) tile.remove();
+    });
+    BOARD_STYLES.forEach((style) => {
+      let tile = this.stylesGrid.querySelector(`[data-style-id="${style.id}"]`);
+      const isNewTile = !tile;
+      if (isNewTile) {
+        tile = this.document.createElement("button");
+        tile.type = "button";
+        tile.className = "style-tile";
+        tile.dataset.styleId = style.id;
+      }
+      const isEquipped = player.equipped_style === style.id;
+      const isOwned = owned.includes(style.id);
+      const shortfall = Math.max(0, style.price - balance);
+      let state;
+      let action;
+      if (isEquipped) { state = "✓ Equipped"; action = "currently equipped"; }
+      else if (isOwned) { state = "Owned"; action = "equip"; }
+      else if (shortfall) { state = `¢ ${style.price} · Need ${shortfall} more`; action = `purchase; need ${shortfall} more coins`; }
+      else { state = `¢ ${style.price}`; action = `purchase for ${style.price} coins`; }
+      tile.setAttribute("aria-label", `${style.name}, ${action}`);
+      const name = this.document.createElement("strong");
+      name.textContent = style.name;
+      const status = this.document.createElement("span");
+      status.className = `style-state${isEquipped ? " style-state--equipped" : ""}`;
+      status.textContent = state;
+      tile.replaceChildren(name, this.createMiniPreview(style), status);
+      if (isNewTile) this.stylesGrid.append(tile);
+    });
+  }
+
+  applyBoardStyle(styleId) {
+    const style = getBoardStyle(styleId);
+    if (!this.gameRoot) return;
+    this.gameRoot.dataset.boardStyle = style.id;
+    for (const [token, value] of Object.entries({ boardColor: style.board, boardSurface: style.cell, cellColor: style.cell, cellBorderColor: style.border, xColor: style.x, oColor: style.o })) {
+      this.gameRoot.style.setProperty(`--${token.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, value);
+    }
+  }
+
+  announceStyle(message) {
+    if (this.styleAnnouncement) this.styleAnnouncement.textContent = message;
+  }
+
+  bindInsufficientDialog() {
+    this.insufficientOk?.addEventListener("click", () => this.closeInsufficientCoins());
+    this.insufficientDialog?.addEventListener("click", (event) => {
+      if (event.target === this.insufficientDialog) this.closeInsufficientCoins();
+    });
+    this.insufficientDialog?.addEventListener("close", () => {
+      const opener = this.insufficientOpener;
+      this.insufficientOpener = null;
+      opener?.focus();
+    });
+    this.insufficientDialog?.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      this.closeInsufficientCoins();
+    });
+  }
+
+  showInsufficientCoins(style, shortfall, opener) {
+    this.insufficientOpener = opener;
+    if (this.insufficientMessage) this.insufficientMessage.textContent = `You need ${shortfall} more coins to unlock ${style.name}`;
+    this.openDialog(this.insufficientDialog, this.insufficientOk);
+  }
+
+  closeInsufficientCoins() {
+    const opener = this.insufficientOpener;
+    this.closeDialog(this.insufficientDialog);
+    this.insufficientOpener = null;
+    opener?.focus();
   }
 
   focusFirstCell() {

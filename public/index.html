@@ -14,10 +14,15 @@
         <h1 id="title">Tic-Tac-Toe</h1>
 
         <section id="home-screen" class="screen" aria-labelledby="home-title">
-            <div id="coin-holder" data-coin-holder class="coin-holder" role="group" aria-label="Coin balance: 0">
-                <span class="coin-art" aria-hidden="true">¢</span>
-                <span id="coin-amount" data-coin-amount class="coin-amount">0000</span>
-                <span class="coin-plus" aria-hidden="true" tabindex="-1">+</span>
+            <div class="home-utility-row">
+                <div id="coin-holder" data-coin-holder class="coin-holder" role="group" aria-label="Coin balance: 0">
+                    <span class="coin-art" aria-hidden="true">¢</span>
+                    <span id="coin-amount" data-coin-amount class="coin-amount">0000</span>
+                    <span class="coin-plus" aria-hidden="true" tabindex="-1">+</span>
+                </div>
+                <button id="open-profile" class="profile-button" type="button" aria-label="Open profile">
+                    <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle cx="24" cy="16" r="8"/><path d="M9 41c1-10 7-15 15-15s14 5 15 15"/></svg>
+                </button>
             </div>
             <p id="coin-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
             <h2 id="home-title">TIC TAC TOE</h2>
@@ -55,6 +60,33 @@
             <p id="leaderboard-message" class="leaderboard-message" hidden></p>
             <div id="leaderboard-list" class="leaderboard-list" role="table" aria-label="Weekly leaderboard"></div>
             <button id="floating-local-row" class="leaderboard-row leaderboard-row--local leaderboard-floating" type="button" aria-label="Jump to your leaderboard position" hidden></button>
+        </section>
+
+        <section id="profile-screen" class="screen secondary-screen" aria-labelledby="profile-title" hidden>
+            <header class="screen-header">
+                <button id="profile-back" class="back-button" type="button" aria-label="Back to Home"><span aria-hidden="true">←</span><span>Back</span></button>
+                <h2 id="profile-title" tabindex="-1">Profile</h2>
+            </header>
+            <strong id="profile-name" class="profile-name"></strong>
+            <dl class="stats-grid">
+                <div class="stat-card"><dt>Games Played</dt><dd data-stat="games_played">0</dd></div>
+                <div class="stat-card"><dt>Wins</dt><dd data-stat="wins">0</dd></div>
+                <div class="stat-card"><dt>Draws</dt><dd data-stat="draws">0</dd></div>
+                <div class="stat-card"><dt>Losses</dt><dd data-stat="losses">0</dd></div>
+                <div class="stat-card"><dt>Moves Played</dt><dd data-stat="moves_played">0</dd></div>
+                <div class="stat-card"><dt>Win Rate</dt><dd data-stat="win_rate">0%</dd></div>
+            </dl>
+            <button id="open-styles" class="styles-entry" type="button">Styles</button>
+        </section>
+
+        <section id="styles-screen" class="screen secondary-screen styles-screen" aria-labelledby="styles-title" hidden>
+            <header class="screen-header">
+                <button id="styles-back" class="back-button" type="button" aria-label="Back to Profile"><span aria-hidden="true">←</span><span>Back</span></button>
+                <h2 id="styles-title" tabindex="-1">Styles</h2>
+                <div id="styles-balance" class="styles-balance" role="status" aria-label="Coin balance: 0"><span class="coin-art" aria-hidden="true">¢</span><span data-styles-balance>0000</span></div>
+            </header>
+            <div id="styles-grid" class="styles-grid" aria-label="Game board styles"></div>
+            <p id="style-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
         </section>
 
         <section id="game-screen" class="screen" aria-labelledby="turn-announcement" hidden>
@@ -102,6 +134,12 @@
                 <p id="matchmaking-message" class="matchmaking-message" role="status">Rounding up a worthy challenger...</p>
                 <p class="matchmaking-tip">Warm up your best opening move — the board is almost yours.</p>
             </div>
+        </dialog>
+
+        <dialog id="insufficient-dialog" aria-labelledby="insufficient-title" aria-describedby="insufficient-message">
+            <h2 id="insufficient-title">Not enough coins</h2>
+            <p id="insufficient-message"></p>
+            <button id="insufficient-ok" type="button">OK</button>
         </dialog>
 
         <dialog id="result-dialog" aria-labelledby="result-message">
