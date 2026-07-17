@@ -32,6 +32,7 @@ export class GameView {
     this.document = documentRef;
     this.gameRoot = documentRef.querySelector(".game");
     this.homeScreen = documentRef.querySelector("#home-screen");
+    this.homeTitle = documentRef.querySelector("#home-title");
     this.gameScreen = documentRef.querySelector("#game-screen");
     this.start = documentRef.querySelector("#start-game");
     this.coinHolder = documentRef.querySelector("#coin-holder");
@@ -143,7 +144,22 @@ export class GameView {
     }
   }
 
+  ensureHomeTitle() {
+    if (!this.homeScreen) return;
+
+    if (!this.homeTitle || !this.homeScreen.contains(this.homeTitle)) {
+      this.homeTitle = this.document.createElement("h2");
+      this.homeTitle.id = "home-title";
+      this.homeTitle.textContent = "TIC TAC TOE";
+      const preview = this.homeScreen.querySelector(".home-preview");
+      this.homeScreen.insertBefore(this.homeTitle, preview || this.start || null);
+    }
+
+    this.homeTitle.hidden = false;
+  }
+
   enterHome(player, onConsumed) {
+    this.ensureHomeTitle();
     this.finishCoinPresentation();
 
     const balance = Number.isInteger(player?.coin_balance) && player.coin_balance >= 0
@@ -452,6 +468,7 @@ export class GameView {
 
   showHome() {
     this.homeScreen.hidden = false;
+    this.ensureHomeTitle();
     this.gameScreen.hidden = true;
     this.start?.focus();
   }

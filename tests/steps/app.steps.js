@@ -125,6 +125,18 @@ Then("the home screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, false);
 });
 
+Then("the home title is visible", function () {
+  const home = this.dom.window.document.querySelector("#home-screen");
+  const title = this.dom.window.document.querySelector("#home-title");
+
+  assert.ok(title, "The home title does not exist");
+  assert.equal(home.contains(title), true);
+  assert.equal(title.textContent, "TIC TAC TOE");
+  assert.equal(title.hidden, false);
+  assert.notEqual(this.dom.window.getComputedStyle(title).display, "none");
+  assert.notEqual(this.dom.window.getComputedStyle(title).visibility, "hidden");
+});
+
 Then("the home screen is hidden", function () {
   assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, true);
 });

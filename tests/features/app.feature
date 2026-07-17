@@ -6,6 +6,7 @@ Feature: Playing a game of tic-tac-toe
   Scenario: The game opens on a home screen
     Given I open the tic-tac-toe game
     Then the home screen is visible
+    And the home title is visible
     And the game board is hidden
     And all board cells are disabled
     When I click the "Start game" button
@@ -186,6 +187,7 @@ Feature: Playing a game of tic-tac-toe
     Then the result dialog says "X Won"
     When I click the "Continue" button
     Then the home screen is visible
+    And the home title is visible
     And the game board is hidden
     And the coin balance shows "0000"
     When the coin celebration completes
