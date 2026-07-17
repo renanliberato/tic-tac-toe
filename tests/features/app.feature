@@ -222,3 +222,35 @@ Feature: Playing a game of tic-tac-toe
     Then the page scale fits the viewport
     When I resize the viewport to 375 by 900
     Then the page scale fits the viewport
+
+  Scenario: A player views their profile and buys and switches board styles
+    Given I have a player profile with 20 coins and match statistics
+    And I open the tic-tac-toe game
+    When I open my profile
+    Then the profile screen shows my match statistics
+    When I click the "Styles" button
+    Then the style catalog shows 9 styles and a balance of "0020"
+    When I choose the "Forest" style
+    Then the "Forest" style is equipped with 11 coins remaining
+    And the style announcement says "Purchased and equipped Forest"
+    When I choose the "Classic" style
+    Then the "Classic" style is equipped with 11 coins remaining
+    And the style announcement says "Equipped Classic"
+    When I go back
+    Then the profile screen shows my match statistics
+    When I go back
+    Then the home screen is visible
+
+  Scenario: A player cannot buy a board style without enough coins
+    Given I have a player profile with 11 coins and match statistics
+    And I open the tic-tac-toe game
+    When I open my profile
+    And I click the "Styles" button
+    And I choose the "Ocean" style
+    Then an insufficient coins dialog says "You need 8 more coins to unlock Ocean"
+    When I click the "OK" button
+    Then the last style choice regains focus
+    And player statistics include:
+      | coin_balance   | 11      |
+      | owned_styles   | classic |
+      | equipped_style | classic |

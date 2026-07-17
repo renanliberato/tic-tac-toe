@@ -21,6 +21,9 @@ class AppWorld {
       delay === 3000 ? 1 : delay,
       ...args
     );
+    if (this.initialPlayer) {
+      this.dom.window.localStorage.setItem("tic-tac-toe-player", JSON.stringify(this.initialPlayer));
+    }
 
     // main.js is an application entry point, so import it after the DOM exists.
     // A unique query string gives each scenario a fresh module instance.
@@ -49,6 +52,23 @@ After(function () {
   globalThis.setTimeout = this.nativeSetTimeout;
   delete globalThis.window;
   delete globalThis.document;
+});
+
+
+Given("I have a player profile with {int} coins and match statistics", function (coins) {
+  this.initialPlayer = {
+    player_id: "123e4567-e89b-42d3-a456-426614174000",
+    games_played: 3,
+    moves_played: 12,
+    wins: 2,
+    draws: 0,
+    losses: 1,
+    coin_balance: coins,
+    pending_coins: 0,
+    last_move: null,
+    owned_styles: ["classic"],
+    equipped_style: "classic"
+  };
 });
 
 Given("I open the tic-tac-toe game", async function () {
@@ -306,4 +326,77 @@ Then("the result dialog has a {string} button", function (label) {
 
 Then("all board cells are disabled", function () {
   assert.ok(this.cells().every((cell) => cell.disabled));
+});
+
+
+When("I open my profile", function () {
+  this.dom.window.document.querySelector("#open-profile").click();
+});
+
+When("I go back", function () {
+  const document = this.dom.window.document;
+  const button = document.querySelector(
+    document.querySelector("#styles-screen").hidden ? "#profile-back" : "#styles-back"
+  );
+  button.click();
+});
+
+When("I choose the {string} style", function (name) {
+  const tile = [...this.dom.window.document.querySelectorAll("[data-style-id]")]
+    .find((candidate) => candidate.querySelector("strong")?.textContent === name);
+  assert.ok(tile, `The ${name} style does not exist`);
+  tile.focus();
+  tile.click();
+  this.lastStyleTile = tile;
+});
+
+Then("the profile screen shows my match statistics", function () {
+  const document = this.dom.window.document;
+  assert.equal(document.querySelector("#profile-screen").hidden, false);
+  assert.ok(
+    ["profile-title", "open-styles"].includes(document.activeElement.id),
+    `Unexpected profile focus: ${document.activeElement.id}`
+  );
+  const expected = {
+    games_played: "3", wins: "2", draws: "0", losses: "1",
+    moves_played: "12", win_rate: "67%"
+  };
+  for (const [name, value] of Object.entries(expected)) {
+    assert.equal(document.querySelector(`[data-stat="${name}"]`).textContent, value);
+  }
+});
+
+Then("the style catalog shows {int} styles and a balance of {string}", function (count, balance) {
+  const document = this.dom.window.document;
+  assert.equal(document.querySelector("#styles-screen").hidden, false);
+  assert.equal(document.activeElement.id, "styles-title");
+  assert.equal(document.querySelectorAll("[data-style-id]").length, count);
+  assert.equal(document.querySelector("[data-styles-balance]").textContent, balance);
+});
+
+Then("the {string} style is equipped with {int} coins remaining", function (name, coins) {
+  const document = this.dom.window.document;
+  const player = JSON.parse(this.dom.window.localStorage.getItem("tic-tac-toe-player"));
+  const styleId = name.toLowerCase();
+  const tile = document.querySelector(`[data-style-id="${styleId}"]`);
+  assert.deepEqual(player.owned_styles.includes(styleId), true);
+  assert.equal(player.equipped_style, styleId);
+  assert.equal(player.coin_balance, coins);
+  assert.equal(tile.querySelector(".style-state").textContent, "✓ Equipped");
+  assert.equal(document.querySelector(".game").dataset.boardStyle, styleId);
+  assert.notEqual(document.querySelector(".game").style.getPropertyValue("--board-color"), "");
+});
+
+Then("the style announcement says {string}", function (message) {
+  assert.equal(this.dom.window.document.querySelector("#style-announcement").textContent, message);
+});
+
+Then("an insufficient coins dialog says {string}", function (message) {
+  const dialog = this.dom.window.document.querySelector("#insufficient-dialog");
+  assert.equal(dialog.open, true);
+  assert.equal(dialog.querySelector("#insufficient-message").textContent, message);
+});
+
+Then("the last style choice regains focus", function () {
+  assert.equal(this.dom.window.document.activeElement, this.lastStyleTile);
 });

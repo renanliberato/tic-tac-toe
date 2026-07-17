@@ -6,7 +6,8 @@ import {
   updatePlayerAfterMove,
   updatePlayerAfterResult,
   awardCoins,
-  consumePendingCoins
+  consumePendingCoins,
+  activatePlayerStyle
 } from "./player.js";
 
 const MATCHMAKING_DURATION = 3000;
@@ -46,6 +47,11 @@ export class GameController {
       this.view.onCell(index, () => this.play(index));
     });
     this.view.onContinue(() => this.showHome());
+    this.view.onProfile?.(() => this.showProfile());
+    this.view.onProfileBack?.(() => this.showHomeFromProfile());
+    this.view.onStyles?.(() => this.showStyles());
+    this.view.onStylesBack?.(() => this.showProfileFromStyles());
+    this.view.onStyle?.((styleId, tile) => this.activateStyle(styleId, tile));
   }
 
   render() {
@@ -151,6 +157,41 @@ export class GameController {
     this.view.enterHome?.(this.player, () => {
       this.player = consumePendingCoins(this.player);
     });
+  }
+
+  showProfile() {
+    this.view.finishCoinPresentation?.();
+    this.render();
+    this.view.showProfile?.(this.player);
+  }
+
+  showHomeFromProfile() {
+    this.view.showHome?.({ focusProfile: true });
+  }
+
+  showStyles() {
+    this.view.renderStyles?.(this.player);
+    this.view.showStyles?.();
+  }
+
+  showProfileFromStyles() {
+    this.view.showProfile?.(this.player, { focusStyles: true });
+  }
+
+  activateStyle(styleId, tile) {
+    const result = activatePlayerStyle(this.player, styleId);
+    if (result.status === "insufficient") {
+      this.view.showInsufficientCoins?.(result.style, result.shortfall, tile);
+      return;
+    }
+    if (result.status !== "purchased" && result.status !== "equipped-owned") return;
+
+    this.player = result.player;
+    this.render();
+    this.view.renderStyles?.(this.player);
+    this.view.announceStyle?.(result.status === "purchased"
+      ? `Purchased and equipped ${result.style.name}`
+      : `Equipped ${result.style.name}`);
   }
 
   stopMatchmaking() {

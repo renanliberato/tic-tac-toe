@@ -1,4 +1,5 @@
 import { createOpponent, createUuid, getNameForId } from "./identity.js";
+import { DEFAULT_STYLE_ID, getBoardStyle, isBoardStyleId } from "./board-styles.js";
 
 export const PLAYER_STORAGE_KEY = "tic-tac-toe-player";
 
@@ -40,7 +41,9 @@ function newPlayer() {
     losses: 0,
     coin_balance: 0,
     pending_coins: 0,
-    last_move: null
+    last_move: null,
+    owned_styles: [DEFAULT_STYLE_ID],
+    equipped_style: DEFAULT_STYLE_ID
   };
 }
 
@@ -55,7 +58,15 @@ function asCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function normalizeOwnedStyles(value) {
+  const supplied = Array.isArray(value) ? value.filter(isBoardStyleId) : [];
+  return [DEFAULT_STYLE_ID, ...new Set(supplied.filter((id) => id !== DEFAULT_STYLE_ID))];
+}
+
 function normalizePlayer(value) {
+  const owned_styles = normalizeOwnedStyles(value.owned_styles);
+  const equipped_style = isBoardStyleId(value.equipped_style)
+    && owned_styles.includes(value.equipped_style) ? value.equipped_style : DEFAULT_STYLE_ID;
   return {
     player_id: value.player_id,
     player_name: getNameForId(value.player_id),
@@ -66,7 +77,9 @@ function normalizePlayer(value) {
     losses: asCount(value.losses),
     coin_balance: asCount(value.coin_balance),
     pending_coins: asCount(value.pending_coins),
-    last_move: value.last_move ?? null
+    last_move: value.last_move ?? null,
+    owned_styles,
+    equipped_style
   };
 }
 
@@ -167,3 +180,32 @@ export function consumePendingCoins(player, storage) {
     pending_coins: 0
   }, storage);
 }
+
+
+/** Atomically purchases/equips a catalog style and returns a descriptive result. */
+export function activatePlayerStyle(player, styleId, storage) {
+  const normalized = normalizePlayer(player);
+  if (!isBoardStyleId(styleId)) return { player: normalized, status: "invalid" };
+  if (normalized.equipped_style === styleId) return { player: normalized, status: "equipped" };
+
+  const style = getBoardStyle(styleId);
+  if (normalized.owned_styles.includes(styleId)) {
+    return { player: savePlayer({ ...normalized, equipped_style: styleId }, storage), status: "equipped-owned", style };
+  }
+  if (normalized.coin_balance < style.price) {
+    return { player: normalized, status: "insufficient", shortfall: style.price - normalized.coin_balance, style };
+  }
+
+  return {
+    player: savePlayer({
+      ...normalized,
+      coin_balance: normalized.coin_balance - style.price,
+      owned_styles: [...normalized.owned_styles, styleId],
+      equipped_style: styleId
+    }, storage),
+    status: "purchased",
+    style
+  };
+}
+
+export const purchaseOrEquipStyle = activatePlayerStyle;
