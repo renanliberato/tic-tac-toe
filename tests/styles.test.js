@@ -347,7 +347,7 @@ describe("game screen layout", () => {
 });
 
 describe("scaled game layout", () => {
-  it("gives the home screen and text intentional design-canvas sizes", () => {
+  it("gives the home screen and title intentional design-canvas sizes", () => {
     expect(styles).toMatch(/\.game #home-screen\s*\{[^}]*width:\s*min\(100%,\s*var\(--home-width\)\)/s);
     expect(styles).toMatch(/\.game #home-screen\s*\{[^}]*min-height:\s*var\(--home-height\)/s);
     expect(styles).toMatch(/\.game #home-screen h2\s*\{[^}]*font-size:\s*64px/s);
