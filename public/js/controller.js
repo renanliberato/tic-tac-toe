@@ -272,6 +272,7 @@ export class GameController {
 
   enterHomePresentation() {
     if (!this.homePresentationEnabled) return;
+    this.reconcileCoinPresentationQueue();
     if (!this.coinPresentationActive) {
       const next = this.coinPresentationQueue.shift();
       if (next) {
@@ -282,6 +283,26 @@ export class GameController {
     const unscheduled = Math.max(0, this.player.pending_coins - this.scheduledPendingCoins);
     if (unscheduled > 0) this.queueCoinPresentation(unscheduled);
     else if (!this.coinPresentationActive) this.view.renderCoinBalance?.(this.player.coin_balance);
+  }
+
+  reconcileCoinPresentationQueue() {
+    const queuedTotal = this.coinPresentationQueue.reduce((total, amount) => total + amount, 0);
+    const activeAmount = this.coinPresentationActive
+      ? Math.max(0, this.scheduledPendingCoins - queuedTotal)
+      : 0;
+    let remaining = Math.max(0, this.player.pending_coins - activeAmount);
+    const reconciled = [];
+
+    for (const amount of this.coinPresentationQueue) {
+      const retained = Math.min(amount, remaining);
+      if (retained > 0) reconciled.push(retained);
+      remaining -= retained;
+      if (remaining <= 0) break;
+    }
+
+    this.coinPresentationQueue = reconciled;
+    this.scheduledPendingCoins = activeAmount
+      + reconciled.reduce((total, amount) => total + amount, 0);
   }
 
   queueCoinPresentation(amount) {
@@ -313,6 +334,7 @@ export class GameController {
       const latest = readLatestPlayer();
       if (!latest || latest.player_id !== this.player.player_id) return;
       this.player = latest;
+      this.reconcileCoinPresentationQueue();
       this.view.renderDailyGift?.(latest.daily_gift);
       if (!this.coinPresentationActive) this.view.renderCoinBalance?.(latest.coin_balance);
       if (latest.daily_gift.claimed && this.view.dailyGiftMode === "claimable") this.view.closeDailyGift?.();

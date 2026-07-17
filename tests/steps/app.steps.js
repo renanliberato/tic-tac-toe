@@ -119,6 +119,16 @@ When("I click the {string} button", function (label) {
   button.click();
 });
 
+When("another tab consumes {int} pending coins", function (amount) {
+  const key = "tic-tac-toe-player";
+  const player = JSON.parse(this.dom.window.localStorage.getItem(key));
+  player.pending_coins = Math.max(0, player.pending_coins - amount);
+  this.dom.window.localStorage.setItem(key, JSON.stringify(player));
+  const event = new this.dom.window.Event("storage");
+  Object.defineProperty(event, "key", { value: key });
+  this.dom.window.dispatchEvent(event);
+});
+
 When("I try to dismiss the result dialog", function () {
   const dialog = this.dom.window.document.querySelector("#result-dialog");
   const cancelEvent = new this.dom.window.Event("cancel", { cancelable: true });
@@ -558,4 +568,12 @@ When("I dismiss daily gifts", function () {
 
 Then("a coin celebration is active", function () {
   assert.ok(this.dom.window.document.querySelector("[data-flying-coin]"));
+});
+
+Then("no coin celebration is active", function () {
+  assert.equal(
+    this.dom.window.document.querySelectorAll("[data-flying-coin]").length,
+    0,
+    "Flying coins should be deferred away from home"
+  );
 });
