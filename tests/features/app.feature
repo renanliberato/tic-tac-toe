@@ -48,6 +48,21 @@ Feature: Playing a game of tic-tac-toe
       | coin_balance  | 13 |
       | pending_coins | 0  |
 
+  Scenario: Matchmaking defers a reward queued during a coin celebration
+    Given I open the tic-tac-toe game with 3 pending coins
+    When I dismiss daily gifts
+    Then a coin celebration is active
+    When another tab claims the daily gift
+    And I start matchmaking
+    Then the matchmaking dialog is visible
+    And no coin celebration is active
+    And player statistics include:
+      | coin_balance  | 13 |
+      | pending_coins | 10 |
+    When matchmaking completes
+    Then the game board is visible
+    And no coin celebration is active
+
   Scenario: The game opens on a home screen
     Given I open the tic-tac-toe game
     Then the home screen is visible

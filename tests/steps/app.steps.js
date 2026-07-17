@@ -285,6 +285,14 @@ Then("a coin celebration is active", function () {
   );
 });
 
+Then("no coin celebration is active", function () {
+  assert.equal(
+    this.dom.window.document.querySelectorAll("[data-flying-coin]").length,
+    0,
+    "Flying coins should be deferred away from home"
+  );
+});
+
 Then("the coin balance shows {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#coin-amount").textContent, expected);
 });

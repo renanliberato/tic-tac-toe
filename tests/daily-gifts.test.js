@@ -248,6 +248,59 @@ describe("daily gift presentation ordering", () => {
     delete globalThis.localStorage;
   });
 
+  it("defers a synced reward when matchmaking interrupts a presentation", () => {
+    const storage = store();
+    playerWithPending(storage);
+    globalThis.localStorage = storage;
+    let storageListener;
+    const view = {
+      ...controllerView(),
+      document: { defaultView: { addEventListener: (type, listener) => {
+        if (type === "storage") storageListener = listener;
+      } } },
+      finishCoinPresentation() {
+        this.presentations.findLast(item => !item.finished)?.finish();
+      },
+      closeResultDialog() {}, resetFeedback() {}, showMatchmaking() {},
+      openMatchmakingDialog() {}, closeMatchmakingDialog() {}, showHome() {}
+    };
+    view.enterHome = function (player, complete) {
+      const presentation = {
+        amount: player.pending_coins,
+        finished: false,
+        finish() {
+          if (this.finished) return;
+          this.finished = true;
+          complete();
+        }
+      };
+      this.presentations.push(presentation);
+    };
+    const timer = { setTimeout: () => 1, clearTimeout() {} };
+    const controller = new GameController(new GameModel(), view, timer);
+
+    view.giftHandlers.dismiss();
+    const external = {
+      ...controller.player,
+      coin_balance: 13,
+      pending_coins: 13,
+      daily_gift: { ...controller.player.daily_gift, claimed: true, revision: 1 }
+    };
+    storage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(external));
+    storageListener({ key: PLAYER_STORAGE_KEY });
+
+    controller.startMatchmaking();
+
+    expect(view.presentations.map(item => item.amount)).toEqual([3]);
+    expect(controller.player.pending_coins).toBe(10);
+
+    controller.showHome();
+    expect(view.presentations.map(item => item.amount)).toEqual([3, 10]);
+    view.presentations[1].finish();
+    expect(controller.player.pending_coins).toBe(0);
+    delete globalThis.localStorage;
+  });
+
   it("does not schedule the same pending backlog twice", () => {
     const storage = store();
     playerWithPending(storage);

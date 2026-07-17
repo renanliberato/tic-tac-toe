@@ -37,6 +37,7 @@ export class GameController {
     this.roundId = 0;
     this.coinPresentationActive = false;
     this.coinPresentationQueue = [];
+    this.homePresentationEnabled = true;
     this.scheduledPendingCoins = 0;
     this.startupGiftHandled = false;
 
@@ -95,6 +96,7 @@ export class GameController {
   }
 
   startMatchmaking() {
+    this.homePresentationEnabled = false;
     this.view.finishCoinPresentation?.();
     if (this.matchmakingTimer !== null) return;
 
@@ -117,6 +119,7 @@ export class GameController {
   }
 
   startGame() {
+    this.homePresentationEnabled = false;
     this.stopMatchmaking();
     this.view.closeResultDialog();
     this.view.resetFeedback();
@@ -153,6 +156,7 @@ export class GameController {
     this.roundId += 1;
     this.model.reset();
     this.view.showHome();
+    this.homePresentationEnabled = true;
     this.enterHomePresentation();
   }
 
@@ -199,6 +203,14 @@ export class GameController {
   }
 
   enterHomePresentation() {
+    if (!this.homePresentationEnabled) return;
+    if (!this.coinPresentationActive) {
+      const next = this.coinPresentationQueue.shift();
+      if (next) {
+        this.startCoinPresentation(next);
+        return;
+      }
+    }
     const unscheduled = Math.max(0, this.player.pending_coins - this.scheduledPendingCoins);
     if (unscheduled > 0) this.queueCoinPresentation(unscheduled);
     else if (!this.coinPresentationActive) this.view.renderCoinBalance?.(this.player.coin_balance);
@@ -207,7 +219,7 @@ export class GameController {
   queueCoinPresentation(amount) {
     if (!Number.isInteger(amount) || amount <= 0) return;
     this.scheduledPendingCoins += amount;
-    if (this.coinPresentationActive) {
+    if (this.coinPresentationActive || !this.homePresentationEnabled) {
       this.coinPresentationQueue.push(amount);
       return;
     }
@@ -221,9 +233,7 @@ export class GameController {
       this.player = consumePendingCoins(this.player, undefined, amount);
       this.scheduledPendingCoins = Math.max(0, this.scheduledPendingCoins - amount);
       this.coinPresentationActive = false;
-      const next = this.coinPresentationQueue.shift();
-      if (next) this.startCoinPresentation(next);
-      else this.enterHomePresentation();
+      this.enterHomePresentation();
     };
     if (this.view.enterHome) this.view.enterHome(presentation, complete);
     else complete();
