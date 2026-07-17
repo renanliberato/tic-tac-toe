@@ -5,6 +5,7 @@ import {
   startPlayerGame,
   updatePlayerAfterMove,
   updatePlayerAfterResult,
+  updatePlayerAfterMatch,
   awardCoins,
   consumePendingCoins
 } from "./player.js";
@@ -173,8 +174,11 @@ export class GameController {
         [state.winner]: this.matchScore[state.winner] + 1
       };
     }
-    if (matchWinner && state.winner === "X") {
-      this.player = awardCoins(this.player, 3);
+    if (matchWinner) {
+      this.player = updatePlayerAfterMatch(this.player, state.winner);
+      if (state.winner === "X") {
+        this.player = awardCoins(this.player, this.player.win_streak === 3 ? 4 : 3);
+      }
     }
     this.resultRecorded = true;
     this.render();

@@ -96,6 +96,7 @@ esac
     DEV_FLOW_PROMPT_LOG: promptLog,
     PATH: `${sandbox.binDirectory}${path.delimiter}${process.env.PATH ?? ""}`
   };
+  delete environment.DEV_FLOW_MODEL;
   const result = spawnSync("./dev-flow", ["--refine-auto", "Add a leaderboard"], {
     cwd: sandbox.directory,
     env: environment,

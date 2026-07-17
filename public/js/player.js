@@ -40,6 +40,7 @@ function newPlayer() {
     losses: 0,
     coin_balance: 0,
     pending_coins: 0,
+    win_streak: 0,
     last_move: null
   };
 }
@@ -55,6 +56,10 @@ function asCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function asWinStreak(value) {
+  return Math.min(asCount(value), 3);
+}
+
 function normalizePlayer(value) {
   return {
     player_id: value.player_id,
@@ -66,6 +71,7 @@ function normalizePlayer(value) {
     losses: asCount(value.losses),
     coin_balance: asCount(value.coin_balance),
     pending_coins: asCount(value.pending_coins),
+    win_streak: asWinStreak(value.win_streak),
     last_move: value.last_move ?? null
   };
 }
@@ -141,6 +147,15 @@ export function updatePlayerAfterResult(player, game, storage) {
   }, storage);
 }
 
+/** Persist the displayed streak when an overall first-to-three match ends. */
+export function updatePlayerAfterMatch(player, winner, storage) {
+  if (winner !== "X" && winner !== "O") return player;
+
+  return savePlayer({
+    ...player,
+    win_streak: winner === "X" ? Math.min(asWinStreak(player.win_streak) + 1, 3) : 0
+  }, storage);
+}
 
 /**
  * Adds earned coins to both the durable balance and the one-time presentation

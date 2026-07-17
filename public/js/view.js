@@ -34,6 +34,9 @@ export class GameView {
     this.homeScreen = documentRef.querySelector("#home-screen");
     this.gameScreen = documentRef.querySelector("#game-screen");
     this.start = documentRef.querySelector("#start-game");
+    this.winStreak = documentRef.querySelector("[data-win-streak]");
+    this.winStreakStatus = documentRef.querySelector("[data-win-streak-status]");
+    this.streakFlames = [...documentRef.querySelectorAll("[data-streak-flame]")];
     this.coinHolder = documentRef.querySelector("#coin-holder");
     this.coinAmount = documentRef.querySelector("#coin-amount");
     this.coinAnnouncement = documentRef.querySelector("#coin-announcement");
@@ -95,6 +98,7 @@ export class GameView {
 
   render(state, gameStarted, winningLine = [], player = null, opponent = null, matchScore = null) {
     if (!this.coinPresentation) this.renderCoinBalance(player?.coin_balance ?? 0);
+    this.renderWinStreak(player?.win_streak);
     this.renderPlayers(player, opponent, state, gameStarted, matchScore);
     this.cells.forEach((cell, index) => {
       const mark = state.board[index] || "";
@@ -125,6 +129,15 @@ export class GameView {
       this.winningLineElement.hidden = !state.winner;
       if (state.winner) this.setWinningLine(this.winningLineElement, winningLine);
     }
+  }
+
+  renderWinStreak(streak) {
+    const value = Number.isInteger(streak) && streak >= 0 ? Math.min(streak, 3) : 0;
+    if (this.winStreakStatus) this.winStreakStatus.textContent = `Win streak: ${value} of 3`;
+    if (this.winStreak) this.winStreak.dataset.streak = String(value);
+    this.streakFlames.forEach((flame, index) => {
+      flame.classList.toggle("streak-flame--filled", index < value);
+    });
   }
 
   renderCoinBalance(balance) {

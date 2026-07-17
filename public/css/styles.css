@@ -215,12 +215,53 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-.game #start-game {
+.game .start-game-wrap {
   position: relative;
   z-index: 1;
+  display: inline-flex;
+}
+
+.game #start-game {
+  position: relative;
   margin: 0;
   transform: scale(3);
   transform-origin: center bottom;
+}
+
+.game .win-streak {
+  position: absolute;
+  top: -200%;
+  right: -100%;
+  z-index: 2;
+  pointer-events: none;
+  transform: translateY(-50%) scale(3);
+  transform-origin: right center;
+}
+
+.game .win-streak__flames {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.game .streak-flame {
+  display: block;
+  width: 18px;
+  height: 24px;
+  overflow: visible;
+}
+
+.game .streak-flame__shape {
+  fill: transparent;
+  stroke: #4a2a24;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.game .streak-flame--filled .streak-flame__shape {
+  fill: var(--streak-flame-fill);
 }
 
 .game #home-screen p {

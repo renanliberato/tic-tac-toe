@@ -196,6 +196,69 @@ Feature: Playing a game of tic-tac-toe
       | coin_balance  | 3 |
       | pending_coins | 0 |
 
+  Scenario: A third consecutive match win fills the streak and awards a bonus coin
+    Given I open the game with a win streak of 2
+    When I click the "Start game" button
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    When the winning-line animation completes
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    When the winning-line animation completes
+    And I click cell 1
+    And I click cell 4
+    And I click cell 2
+    And I click cell 5
+    And I click cell 3
+    Then the result dialog says "X Won"
+    And player statistics include:
+      | win_streak    | 3 |
+      | coin_balance  | 4 |
+      | pending_coins | 4 |
+    When I click the "Continue" button
+    Then the home win streak shows 3 filled flames
+    When the coin celebration completes
+    Then the coin balance shows "0004"
+    And the coin announcement says "4 coins earned; balance 4"
+
+  Scenario: Losing an overall match resets the persisted win streak
+    Given I open the game with a win streak of 2
+    When I click the "Start game" button
+    And I click cell 2
+    And I click cell 1
+    And I click cell 3
+    And I click cell 4
+    And I click cell 5
+    And I click cell 7
+    When the winning-line animation completes
+    And I click cell 2
+    And I click cell 1
+    And I click cell 3
+    And I click cell 4
+    And I click cell 5
+    And I click cell 7
+    When the winning-line animation completes
+    And I click cell 2
+    And I click cell 1
+    And I click cell 3
+    And I click cell 4
+    And I click cell 5
+    And I click cell 7
+    Then the result dialog says "O Won"
+    And player statistics include:
+      | win_streak    | 0 |
+      | coin_balance  | 0 |
+      | pending_coins | 0 |
+    When I click the "Continue" button
+    Then the home win streak shows 0 filled flames
+    And the coin balance shows "0000"
+
   Scenario: The game ends in a draw when the board is full
     Given I open the tic-tac-toe game
     When I click the "Start game" button
