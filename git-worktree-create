@@ -11,6 +11,25 @@ merge_lock_timeout=${GIT_WORKTREE_MERGE_LOCK_TIMEOUT:-30}
 case "$merge_lock_timeout" in
     ''|*[!0-9]*) merge_lock_timeout=30 ;;
 esac
+# Keep the value within the range supported by POSIX test and shell arithmetic.
+# Strip leading zeroes first so a decimal value such as 0000000000 remains zero.
+while [ "${merge_lock_timeout#0}" != "$merge_lock_timeout" ]; do
+    merge_lock_timeout=${merge_lock_timeout#0}
+done
+[ -n "$merge_lock_timeout" ] || merge_lock_timeout=0
+
+# POSIX guarantees support through 2147483647; cap only larger values. The
+# explicit ten-digit cases avoid asking test to parse an oversized integer.
+merge_lock_timeout_length=${#merge_lock_timeout}
+if [ "$merge_lock_timeout_length" -gt 10 ]; then
+    merge_lock_timeout=2147483647
+elif [ "$merge_lock_timeout_length" -eq 10 ]; then
+    case "$merge_lock_timeout" in
+        [3-9]*|2[2-9]*|21[5-9]*|214[8-9]*|2147[5-9]*|21474[8-9]*|214748[4-9]*|2147483[7-9]*|21474836[5-9]*|214748364[8-9]*)
+            merge_lock_timeout=2147483647
+            ;;
+    esac
+fi
 
 release_merge_lock() {
     if [ "${merge_lock_owned-false}" = true ]; then
