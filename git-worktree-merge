@@ -4,6 +4,11 @@
 
 set -u
 
+merge_lock_timeout=${GIT_WORKTREE_MERGE_LOCK_TIMEOUT:-30}
+case "$merge_lock_timeout" in
+    ''|*[!0-9]*) merge_lock_timeout=30 ;;
+esac
+
 acquire_lock() {
     git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
     case "$git_common_dir" in
@@ -13,8 +18,15 @@ acquire_lock() {
     merge_lock="$git_common_dir/git-worktree-merge.lock"
     # Never abandon a merge because another merge is still using the shared
     # lock. Retry the atomic create until the current owner releases it.
+    merge_lock_waited=0
     while ! (set -C; : > "$merge_lock") 2>/dev/null; do
+        if [ "$merge_lock_waited" -ge "$merge_lock_timeout" ]; then
+            printf 'git-worktree-merge: timed out after %s seconds waiting for merge lock: %s\n' \
+                "$merge_lock_timeout" "$merge_lock" >&2
+            return 2
+        fi
         sleep 1
+        merge_lock_waited=$((merge_lock_waited + 1))
     done
     merge_lock_owned=true
     printf '%s\n' "$$" > "$merge_lock"
@@ -111,9 +123,14 @@ main() {
     # primary checkout and every linked worktree.
     merge_lock=''
     merge_lock_owned=false
-    if ! acquire_lock; then
-        printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
-        return 1
+    if acquire_lock; then
+        :
+    else
+        status=$?
+        if [ "$status" -eq 1 ]; then
+            printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
+        fi
+        return "$status"
     fi
     trap release_lock INT TERM HUP EXIT
 

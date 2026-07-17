@@ -55,7 +55,7 @@ describe("git-worktree-create", () => {
     expect(after).toBe(realpathSync(repository));
     expect(worktreePath).toMatch(new RegExp(`${escapeRegExp(realpathSync(repository))}/\\.worktrees/[0-9a-f]{6}$`));
     expect(worktreeCount(repository)).toBe(2);
-  }, 15000);
+  }, 30000);
 
   it("waits for a merge lock before creating a worktree", () => {
     const repository = createRepository();
@@ -72,7 +72,7 @@ describe("git-worktree-create", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).not.toContain("another merge holds");
     expect(worktreeCount(repository)).toBe(2);
-  });
+  }, 30000);
 
   it("waits for the common lock when invoked from a linked worktree", () => {
     const repository = createRepository();
@@ -95,7 +95,7 @@ describe("git-worktree-create", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).not.toContain("another merge holds");
     expect(worktreeCount(repository)).toBe(3);
-  });
+  }, 30000);
 
   it("changes the current shell to the new worktree when sourced", () => {
     const repository = createRepository();

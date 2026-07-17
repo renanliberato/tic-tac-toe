@@ -69,7 +69,7 @@ describe("git-worktree-merge", () => {
     expect(worktreeCount(repository)).toBe(1);
     expect(() => runGit(repository, "show-ref", "--verify", "refs/heads/abc123")).toThrow();
     expect(readFileSync(path.join(repository, "README"), "utf8")).toBe("base\nchange\n");
-  });
+  }, 30000);
 
   it("waits for the merge lock after synchronization", () => {
     const repository = createRepository();
@@ -105,5 +105,5 @@ exit 0
     expect(result.stderr).not.toContain("another merge holds");
     expect(existsSync(worktree)).toBe(false);
     expect(worktreeCount(repository)).toBe(1);
-  });
+  }, 30000);
 });

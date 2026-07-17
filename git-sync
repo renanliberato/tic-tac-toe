@@ -3,6 +3,11 @@
 
 set -u
 
+merge_lock_timeout=${GIT_WORKTREE_MERGE_LOCK_TIMEOUT:-30}
+case "$merge_lock_timeout" in
+    ''|*[!0-9]*) merge_lock_timeout=30 ;;
+esac
+
 release_merge_lock() {
     if [ "${merge_lock_owned-false}" = true ]; then
         rm -f "$merge_lock"
@@ -27,8 +32,15 @@ esac
 merge_lock="$git_common_dir/git-worktree-merge.lock"
 # Lock acquisition must wait: sync can be started by a merge in another
 # worktree, and abandoning it would skip synchronization for that branch.
+merge_lock_waited=0
 while ! (set -C; : > "$merge_lock") 2>/dev/null; do
+    if [ "$merge_lock_waited" -ge "$merge_lock_timeout" ]; then
+        printf 'git-sync: timed out after %s seconds waiting for merge lock: %s\n' \
+            "$merge_lock_timeout" "$merge_lock" >&2
+        exit 1
+    fi
     sleep 1
+    merge_lock_waited=$((merge_lock_waited + 1))
 done
 merge_lock_owned=true
 printf '%s\n' "$$" > "$merge_lock"

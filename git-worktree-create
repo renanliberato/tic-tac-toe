@@ -7,6 +7,11 @@
 
 set -u
 
+merge_lock_timeout=${GIT_WORKTREE_MERGE_LOCK_TIMEOUT:-30}
+case "$merge_lock_timeout" in
+    ''|*[!0-9]*) merge_lock_timeout=30 ;;
+esac
+
 release_merge_lock() {
     if [ "${merge_lock_owned-false}" = true ]; then
         rm -f "$merge_lock"
@@ -23,8 +28,15 @@ acquire_merge_lock() {
     merge_lock="$git_common_dir/git-worktree-merge.lock"
     # Creation must wait for an in-progress merge instead of abandoning the
     # request when another worktree owns the shared lock.
+    merge_lock_waited=0
     while ! (set -C; : > "$merge_lock") 2>/dev/null; do
+        if [ "$merge_lock_waited" -ge "$merge_lock_timeout" ]; then
+            printf 'git-worktree-create: timed out after %s seconds waiting for merge lock: %s\n' \
+                "$merge_lock_timeout" "$merge_lock" >&2
+            return 2
+        fi
         sleep 1
+        merge_lock_waited=$((merge_lock_waited + 1))
     done
     merge_lock_owned=true
     printf '%s\n' "$$" > "$merge_lock"
@@ -52,9 +64,14 @@ main() {
         return 1
     fi
     merge_lock=''
-    if ! acquire_merge_lock; then
-        printf '%s\n' 'git-worktree-create: could not locate the common Git directory' >&2
-        return 1
+    if acquire_merge_lock; then
+        :
+    else
+        status=$?
+        if [ "$status" -eq 1 ]; then
+            printf '%s\n' 'git-worktree-create: could not locate the common Git directory' >&2
+        fi
+        return "$status"
     fi
     trap release_merge_lock INT TERM HUP
 
