@@ -87,8 +87,7 @@ describe("git merge lock", () => {
     writeFileSync(sync, readFileSync(path.join(repositoryRoot, "git-sync"), "utf8"));
     chmodSync(sync, 0o755);
     const lock = mergeLockPath(repository);
-    writeFileSync(lock, "abandoned process
-");
+    writeFileSync(lock, "abandoned process\n");
 
     const result = spawnSync("./git-sync", {
       cwd: repository,
@@ -98,7 +97,6 @@ describe("git merge lock", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("git-sync: timed out after 1 seconds waiting for merge lock");
-    expect(readFileSync(lock, "utf8")).toBe("abandoned process
-");
+    expect(readFileSync(lock, "utf8")).toBe("abandoned process\n");
   }, 10000);
 });

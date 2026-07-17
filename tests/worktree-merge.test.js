@@ -77,22 +77,17 @@ describe("git-worktree-merge", () => {
     const worktree = path.join(worktreeParent, "abc123");
     mkdirSync(worktreeParent);
     runGit(repository, "worktree", "add", "--quiet", "-b", "abc123", worktree);
-    writeFileSync(path.join(worktree, "README"), "base
-change
-");
+    writeFileSync(path.join(worktree, "README"), "base\nchange\n");
     runGit(worktree, "add", "README");
     runGit(worktree, "commit", "--quiet", "-m", "change");
     runGit(worktree, "push", "--quiet", "--set-upstream", "origin", "abc123");
 
     // Make synchronization a no-op so the lock is deliberately contended at
     // git-worktree-merge's own acquisition point.
-    writeFileSync(path.join(repository, "git-sync"), "#!/bin/sh
-exit 0
-");
+    writeFileSync(path.join(repository, "git-sync"), "#!/bin/sh\nexit 0\n");
     chmodSync(path.join(repository, "git-sync"), 0o755);
     const lock = mergeLockPath(repository);
-    writeFileSync(lock, "merge in progress
-");
+    writeFileSync(lock, "merge in progress\n");
 
     const result = spawnSync("sh", [
       "-c",
