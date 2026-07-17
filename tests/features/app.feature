@@ -187,6 +187,14 @@ Feature: Playing a game of tic-tac-toe
     When I click the "Continue" button
     Then the home screen is visible
     And the game board is hidden
+    And the coin balance shows "0000"
+    When the coin celebration completes
+    Then the coin balance shows "0003"
+    And the coin holder has accessibility label "Coin balance: 3"
+    And the coin announcement says "3 coins earned; balance 3"
+    And player statistics include:
+      | coin_balance  | 3 |
+      | pending_coins | 0 |
 
   Scenario: The game ends in a draw when the board is full
     Given I open the tic-tac-toe game

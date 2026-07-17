@@ -4,7 +4,9 @@ import {
   getOrCreatePlayer,
   startPlayerGame,
   updatePlayerAfterMove,
-  updatePlayerAfterResult
+  updatePlayerAfterResult,
+  awardCoins,
+  consumePendingCoins
 } from "./player.js";
 
 const MATCHMAKING_DURATION = 3000;
@@ -35,6 +37,7 @@ export class GameController {
     this.bindViewEvents();
     this.view.bindDialogGuards();
     this.render();
+    this.enterHomePresentation();
   }
 
   bindViewEvents() {
@@ -83,6 +86,7 @@ export class GameController {
   }
 
   startMatchmaking() {
+    this.view.finishCoinPresentation?.();
     if (this.matchmakingTimer !== null) return;
 
     this.view.closeResultDialog();
@@ -140,6 +144,13 @@ export class GameController {
     this.roundId += 1;
     this.model.reset();
     this.view.showHome();
+    this.enterHomePresentation();
+  }
+
+  enterHomePresentation() {
+    this.view.enterHome?.(this.player, () => {
+      this.player = consumePendingCoins(this.player);
+    });
   }
 
   stopMatchmaking() {
@@ -153,12 +164,17 @@ export class GameController {
   recordResult(state) {
     if (this.resultRecorded || (!state.winner && !state.draw)) return;
 
+    const matchWinner = state.winner
+      && this.matchScore[state.winner] + 1 >= MATCH_POINTS_TO_WIN;
     this.player = updatePlayerAfterResult(this.player, state);
     if (state.winner) {
       this.matchScore = {
         ...this.matchScore,
         [state.winner]: this.matchScore[state.winner] + 1
       };
+    }
+    if (matchWinner && state.winner === "X") {
+      this.player = awardCoins(this.player, 3);
     }
     this.resultRecorded = true;
     this.render();

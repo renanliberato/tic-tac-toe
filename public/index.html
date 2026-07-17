@@ -14,6 +14,12 @@
         <h1 id="title">Tic-Tac-Toe</h1>
 
         <section id="home-screen" class="screen" aria-labelledby="home-title">
+            <div id="coin-holder" data-coin-holder class="coin-holder" role="group" aria-label="Coin balance: 0">
+                <span class="coin-art" aria-hidden="true">¢</span>
+                <span id="coin-amount" data-coin-amount class="coin-amount">0000</span>
+                <span class="coin-plus" aria-hidden="true" tabindex="-1">+</span>
+            </div>
+            <p id="coin-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
             <h2 id="home-title">TIC TAC TOE</h2>
 
             <div class="home-preview" aria-hidden="true">
