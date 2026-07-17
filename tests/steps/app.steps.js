@@ -44,6 +44,7 @@ setWorldConstructor(AppWorld);
 After(function () {
   if (!this.dom) return;
 
+  this.turnAnnouncementObserver?.disconnect();
   this.dom.window.close();
   globalThis.setTimeout = this.nativeSetTimeout;
   delete globalThis.window;
@@ -69,6 +70,16 @@ When("I start matchmaking", function () {
   const button = this.dom.window.document.querySelector("#start-game");
   assert.ok(button, "The Start game button does not exist");
   button.click();
+});
+
+When("I watch the turn announcement", function () {
+  const announcement = this.dom.window.document.querySelector("#turn-announcement");
+  assert.ok(announcement, "The turn announcement does not exist");
+  this.turnAnnouncementChanges = 0;
+  this.turnAnnouncementObserver = new this.dom.window.MutationObserver((mutations) => {
+    this.turnAnnouncementChanges += mutations.length;
+  });
+  this.turnAnnouncementObserver.observe(announcement, { childList: true, characterData: true, subtree: true });
 });
 
 When("matchmaking completes", async function () {
@@ -170,6 +181,10 @@ Then("the status says {string}", function (expected) {
 
 Then("the turn announcement says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("#turn-announcement").textContent, expected);
+});
+
+Then("the turn announcement changes once", function () {
+  assert.equal(this.turnAnnouncementChanges, 1);
 });
 
 Then("cell {int} contains {string}", function (number, expected) {

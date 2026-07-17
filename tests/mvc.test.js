@@ -116,9 +116,9 @@ describe("MVC game architecture", () => {
     matchmakingCallback();
 
     const gameRenders = view.rendered.filter(({ gameStarted }) => gameStarted);
-    expect(gameRenders.length).toBeGreaterThan(0);
+    expect(gameRenders).toHaveLength(1);
     expect(gameRenders[0].gameVisible).toBe(true);
-    expect(view.events.slice(-4)).toEqual(["showGame", "render", "render", "focusFirstCell"]);
+    expect(view.events.slice(-3)).toEqual(["showGame", "render", "focusFirstCell"]);
   });
 
   it("coordinates matchmaking, moves, and a winning result without a DOM", async () => {

@@ -87,7 +87,6 @@ export class GameController {
     this.player = startPlayerGame(this.player);
     this.view.showGame();
     this.model.reset();
-    this.render();
     this.view.focusFirstCell();
   }
 

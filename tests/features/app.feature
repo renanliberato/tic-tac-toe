@@ -37,6 +37,12 @@ Feature: Playing a game of tic-tac-toe
     And the turn announcement says "Player X's turn"
     And the status says ""
 
+  Scenario: The initial turn announcement is rendered once
+    Given I open the tic-tac-toe game
+    When I watch the turn announcement
+    And I click the "Start game" button
+    Then the turn announcement changes once
+
   Scenario: A game identifies both players by friendly names
     Given I open the tic-tac-toe game
     When I click the "Start game" button
