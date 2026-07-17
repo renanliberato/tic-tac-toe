@@ -48,6 +48,21 @@ Feature: Playing a game of tic-tac-toe
       | coin_balance  | 13 |
       | pending_coins | 0  |
 
+  Scenario: A queued reward consumed in another tab is not presented
+    Given I open the tic-tac-toe game with 3 pending coins
+    When I dismiss daily gifts
+    Then a coin celebration is active
+    When I open daily gifts
+    And I claim the daily gift
+    And the daily gift claim animation completes
+    And another tab consumes 10 pending coins
+    And the coin celebration completes
+    Then no coin celebration is active
+    And the coin balance shows "0013"
+    And player statistics include:
+      | coin_balance  | 13 |
+      | pending_coins | 0  |
+
   Scenario: Matchmaking defers a reward queued during a coin celebration
     Given I open the tic-tac-toe game with 3 pending coins
     When I dismiss daily gifts

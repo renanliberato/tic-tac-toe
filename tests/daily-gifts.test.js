@@ -301,6 +301,55 @@ describe("daily gift presentation ordering", () => {
     delete globalThis.localStorage;
   });
 
+  it("drops a deferred reward consumed externally during matchmaking", () => {
+    const storage = store();
+    playerWithPending(storage);
+    globalThis.localStorage = storage;
+    let storageListener;
+    const view = {
+      ...controllerView(),
+      document: { defaultView: { addEventListener: (type, listener) => {
+        if (type === "storage") storageListener = listener;
+      } } },
+      finishCoinPresentation() {
+        this.presentations.findLast(item => !item.finished)?.finish();
+      },
+      closeResultDialog() {}, resetFeedback() {}, showMatchmaking() {},
+      openMatchmakingDialog() {}, closeMatchmakingDialog() {}, showHome() {}
+    };
+    view.enterHome = function (player, complete) {
+      const presentation = {
+        amount: player.pending_coins,
+        finished: false,
+        finish() {
+          if (this.finished) return;
+          this.finished = true;
+          complete();
+        }
+      };
+      this.presentations.push(presentation);
+    };
+    const timer = { setTimeout: () => 1, clearTimeout() {} };
+    const controller = new GameController(new GameModel(), view, timer);
+
+    view.giftHandlers.dismiss();
+    controller.openDailyGift(view.dailyGiftLauncher);
+    view.giftHandlers.claim();
+    expect(controller.coinPresentationQueue).toEqual([10]);
+
+    controller.startMatchmaking();
+
+    const consumed = { ...controller.player, pending_coins: 0 };
+    storage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(consumed));
+    storageListener({ key: PLAYER_STORAGE_KEY });
+    controller.showHome();
+
+    expect(view.presentations.map(item => item.amount)).toEqual([3]);
+    expect(controller.coinPresentationQueue).toEqual([]);
+    expect(controller.scheduledPendingCoins).toBe(0);
+    delete globalThis.localStorage;
+  });
+
   it("does not schedule the same pending backlog twice", () => {
     const storage = store();
     playerWithPending(storage);

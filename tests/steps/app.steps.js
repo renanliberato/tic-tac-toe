@@ -155,6 +155,16 @@ When("another tab claims the daily gift", function () {
   this.dom.window.dispatchEvent(event);
 });
 
+When("another tab consumes {int} pending coins", function (amount) {
+  const key = "tic-tac-toe-player";
+  const player = JSON.parse(this.dom.window.localStorage.getItem(key));
+  player.pending_coins = Math.max(0, player.pending_coins - amount);
+  this.dom.window.localStorage.setItem(key, JSON.stringify(player));
+  const event = new this.dom.window.Event("storage");
+  Object.defineProperty(event, "key", { value: key });
+  this.dom.window.dispatchEvent(event);
+});
+
 When("I try to dismiss the result dialog", function () {
   const dialog = this.dom.window.document.querySelector("#result-dialog");
   const cancelEvent = new this.dom.window.Event("cancel", { cancelable: true });
