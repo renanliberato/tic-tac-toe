@@ -281,7 +281,7 @@ describe("MVC game architecture", () => {
     expect(view.cells[0].getAttribute("aria-label")).toBe("Cell 1, X");
     expect(documentRef.querySelector("#status").textContent).toBe("");
     const turnAnnouncement = documentRef.querySelector("#turn-announcement");
-    expect(turnAnnouncement.textContent).toBe("");
+    expect(turnAnnouncement.textContent).toBe("Player X won!");
 
     const winningLine = documentRef.querySelector("[data-winning-line]");
     expect(winningLine.dataset.line).toBe("0,1,2");

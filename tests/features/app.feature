@@ -59,7 +59,7 @@ Feature: Playing a game of tic-tac-toe
     And I click cell 5
     And I click cell 3
     Then the status says ""
-    And the turn announcement says ""
+    And the turn announcement says "Player X won!"
     And the board contains "X" in cells 1, 2, and 3
     And the board renders X and O as SVG icons
     And the winning cells are highlighted

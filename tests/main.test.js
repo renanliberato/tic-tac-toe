@@ -269,6 +269,27 @@ describe("game entry point", () => {
     });
   });
 
+  it("announces a non-final round win before starting the next round", async () => {
+    await import("../public/js/main.js?round-win-announcement");
+
+    document.querySelector("#start-game").click();
+    vi.advanceTimersByTime(3000);
+    setBoardMetrics();
+
+    for (const index of [0, 3, 1, 4, 2]) {
+      document.querySelector(`[data-cell="${index}"]`).click();
+    }
+
+    expect(document.querySelector("#status").textContent).toBe("");
+    expect(document.querySelector("#turn-announcement").textContent).toBe("Player X won!");
+    expect(document.querySelector("#result-dialog").open).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(700);
+
+    expect([...document.querySelectorAll("[data-cell]")].every((cell) => cell.textContent === "")).toBe(true);
+    expect(document.querySelector("#turn-announcement").textContent).toBe("Player X's turn");
+  });
+
   it("shows the winner dialog and returns home when Continue is clicked", async () => {
     await import("../public/js/main.js?winner-dialog");
 
