@@ -1,4 +1,6 @@
 import { applyPageScale } from "./layout.js";
+import { createStandings, getCycle } from "./leaderboard.js";
+import { PLAYER_STORAGE_KEY } from "./player.js";
 
 const WINNING_LINE_DURATION = 700;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -19,11 +21,18 @@ const WINNING_LINE_CLASSES = {
  * markup, classes, focus changes, and visual feedback.
  */
 export class GameView {
-  constructor(documentRef = globalThis.document) {
+  constructor(documentRef = globalThis.document, clock = () => Date.now()) {
     this.document = documentRef;
+    this.now = clock;
     this.gameRoot = documentRef.querySelector(".game");
     this.homeScreen = documentRef.querySelector("#home-screen");
     this.gameScreen = documentRef.querySelector("#game-screen");
+    this.leaderboardScreen = documentRef.querySelector("#leaderboard-screen");
+    this.leaderboardEntry = documentRef.querySelector("#open-leaderboard");
+    this.leaderboardBack = documentRef.querySelector("#leaderboard-back");
+    this.leaderboardList = documentRef.querySelector("#leaderboard-list");
+    this.leaderboardMessage = documentRef.querySelector("#leaderboard-message");
+    this.floatingLocalRow = documentRef.querySelector("#floating-local-row");
     this.start = documentRef.querySelector("#start-game");
     this.cells = [...documentRef.querySelectorAll("[data-cell]")];
     this.board = documentRef.querySelector(".board");
@@ -44,6 +53,20 @@ export class GameView {
     this.winningAnimationId = 0;
     this.winningAnimationTimer = null;
     this.winningAnimationCleanup = null;
+    this.leaderboardRefreshHandler = null;
+    this.leaderboardInterval = null;
+    this.leaderboardObserver = null;
+    this.leaderboardOpen = false;
+    this.currentLeaderboardPlayer = null;
+    this.handleLeaderboardScroll = () => this.updateFloatingLocalRow();
+    this.handleVisibilityChange = () => {
+      if (this.document.visibilityState === "visible") this.refreshLeaderboard();
+    };
+    this.handleStorageChange = (event) => {
+      if (event.key === PLAYER_STORAGE_KEY) this.refreshLeaderboard(true);
+    };
+    this.handleFloatingActivation = () => this.jumpToLocalRow();
+
 
     if (!this.winningLineElement && this.board) {
       this.winningLineElement = documentRef.createElement("span");
@@ -66,6 +89,18 @@ export class GameView {
 
   onContinue(handler) {
     this.continueButton?.addEventListener("click", handler);
+  }
+
+  onLeaderboardOpen(handler) {
+    this.leaderboardEntry?.addEventListener("click", handler);
+  }
+
+  onLeaderboardBack(handler) {
+    this.leaderboardBack?.addEventListener("click", handler);
+  }
+
+  onLeaderboardRefresh(handler) {
+    this.leaderboardRefreshHandler = handler;
   }
 
   preventDialogDismissal(dialog) {
@@ -248,6 +283,20 @@ export class GameView {
     }
     this.winningAnimationCleanup?.();
     this.winningAnimationCleanup = null;
+    this.leaderboardRefreshHandler = null;
+    this.leaderboardInterval = null;
+    this.leaderboardObserver = null;
+    this.leaderboardOpen = false;
+    this.currentLeaderboardPlayer = null;
+    this.handleLeaderboardScroll = () => this.updateFloatingLocalRow();
+    this.handleVisibilityChange = () => {
+      if (this.document.visibilityState === "visible") this.refreshLeaderboard();
+    };
+    this.handleStorageChange = (event) => {
+      if (event.key === PLAYER_STORAGE_KEY) this.refreshLeaderboard(true);
+    };
+    this.handleFloatingActivation = () => this.jumpToLocalRow();
+
 
     if (this.winningLineElement) {
       this.winningLineElement.classList.remove("winning-line--active");
@@ -275,6 +324,20 @@ export class GameView {
         }
         winningAnimationElement.removeEventListener("animationend", finish);
         this.winningAnimationCleanup = null;
+    this.leaderboardRefreshHandler = null;
+    this.leaderboardInterval = null;
+    this.leaderboardObserver = null;
+    this.leaderboardOpen = false;
+    this.currentLeaderboardPlayer = null;
+    this.handleLeaderboardScroll = () => this.updateFloatingLocalRow();
+    this.handleVisibilityChange = () => {
+      if (this.document.visibilityState === "visible") this.refreshLeaderboard();
+    };
+    this.handleStorageChange = (event) => {
+      if (event.key === PLAYER_STORAGE_KEY) this.refreshLeaderboard(true);
+    };
+    this.handleFloatingActivation = () => this.jumpToLocalRow();
+
         resolve();
       };
 
@@ -290,18 +353,160 @@ export class GameView {
     });
   }
 
-  showHome() {
+  showLeaderboard(player, timestamp = this.now()) {
+    if (!this.leaderboardScreen) return;
+    this.homeScreen.hidden = true;
+    this.gameScreen.hidden = true;
+    this.leaderboardScreen.hidden = false;
+    this.leaderboardOpen = true;
+    this.currentLeaderboardPlayer = player;
+    this.renderLeaderboard(player, timestamp, false);
+    this.leaderboardList.scrollTop = 0;
+    this.startLeaderboardLifecycle();
+    this.leaderboardBack?.focus();
+  }
+
+  renderLeaderboard(player, timestamp = this.now(), preserveScroll = true) {
+    if (!this.leaderboardList) return;
+    const scrollTop = preserveScroll ? this.leaderboardList.scrollTop : 0;
+    const standings = createStandings(timestamp, player);
+    const fragment = this.document.createDocumentFragment();
+
+    for (const entry of standings) {
+      const row = this.document.createElement("div");
+      row.className = `leaderboard-row${entry.type === "local" ? " leaderboard-row--local" : ""}`;
+      row.setAttribute("role", "row");
+      if (entry.type === "local") {
+        row.id = "leaderboard-local-row";
+        row.tabIndex = -1;
+      }
+      row.append(
+        this.createLeaderboardCell(entry.rank ?? "—", "position"),
+        this.createLeaderboardCell(entry.name, "player"),
+        this.createLeaderboardCell(entry.score, "score")
+      );
+      fragment.append(row);
+    }
+    this.leaderboardList.replaceChildren(fragment);
+    this.leaderboardList.scrollTop = scrollTop;
+    const prelaunch = !getCycle(timestamp);
+    if (this.leaderboardMessage) {
+      this.leaderboardMessage.textContent = prelaunch ? "Starts Jan 4, 2026" : "";
+      this.leaderboardMessage.hidden = !prelaunch;
+    }
+    this.renderFloatingLocalRow(standings.find(({ type }) => type === "local"));
+    this.observeLocalRow();
+  }
+
+  createLeaderboardCell(value, column) {
+    const cell = this.document.createElement("span");
+    cell.className = `leaderboard-row__${column}`;
+    cell.setAttribute("role", "cell");
+    cell.textContent = String(value);
+    return cell;
+  }
+
+  renderFloatingLocalRow(local) {
+    if (!this.floatingLocalRow || !local) return;
+    this.floatingLocalRow.replaceChildren(
+      this.createLeaderboardCell(local.rank ?? "—", "position"),
+      this.createLeaderboardCell(local.name, "player"),
+      this.createLeaderboardCell(local.score, "score")
+    );
+  }
+
+  startLeaderboardLifecycle() {
+    this.stopLeaderboardLifecycle();
+    const windowRef = this.document.defaultView;
+    this.leaderboardList?.addEventListener("scroll", this.handleLeaderboardScroll);
+    this.floatingLocalRow?.addEventListener("click", this.handleFloatingActivation);
+    this.document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    windowRef?.addEventListener("storage", this.handleStorageChange);
+    this.leaderboardInterval = windowRef?.setInterval(() => this.refreshLeaderboard(), 60_000) ?? null;
+    this.observeLocalRow();
+  }
+
+  stopLeaderboardLifecycle() {
+    const windowRef = this.document.defaultView;
+    if (this.leaderboardInterval !== null) {
+      windowRef?.clearInterval(this.leaderboardInterval);
+      this.leaderboardInterval = null;
+    }
+    this.leaderboardObserver?.disconnect();
+    this.leaderboardObserver = null;
+    this.leaderboardList?.removeEventListener("scroll", this.handleLeaderboardScroll);
+    this.floatingLocalRow?.removeEventListener("click", this.handleFloatingActivation);
+    this.document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    windowRef?.removeEventListener("storage", this.handleStorageChange);
+  }
+
+  stopLeaderboard() {
+    this.leaderboardOpen = false;
+    this.stopLeaderboardLifecycle();
+    if (this.leaderboardScreen) this.leaderboardScreen.hidden = true;
+  }
+
+  refreshLeaderboard(fromStorage = false) {
+    if (!this.leaderboardOpen) return;
+    this.currentLeaderboardPlayer = this.leaderboardRefreshHandler?.(fromStorage)
+      || this.currentLeaderboardPlayer;
+    this.renderLeaderboard(this.currentLeaderboardPlayer, this.now(), true);
+  }
+
+  observeLocalRow() {
+    this.leaderboardObserver?.disconnect();
+    const localRow = this.document.querySelector("#leaderboard-local-row");
+    const IntersectionObserverRef = this.document.defaultView?.IntersectionObserver;
+    if (IntersectionObserverRef && localRow) {
+      this.leaderboardObserver = new IntersectionObserverRef((entries) => {
+        const localEntry = entries.find(({ target }) => target === localRow);
+        if (localEntry && this.floatingLocalRow) {
+          this.floatingLocalRow.hidden = localEntry.isIntersecting;
+        }
+      }, { root: this.leaderboardList, threshold: 0.01 });
+      this.leaderboardObserver.observe(localRow);
+    }
+    this.updateFloatingLocalRow();
+  }
+
+  updateFloatingLocalRow() {
+    const row = this.document.querySelector("#leaderboard-local-row");
+    if (!row || !this.leaderboardList || !this.floatingLocalRow) return;
+    const listRect = this.leaderboardList.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const hasLayout = listRect.height > 0 || rowRect.height > 0;
+    const visible = hasLayout
+      ? rowRect.bottom > listRect.top && rowRect.top < listRect.bottom
+      : this.leaderboardList.scrollTop === 0 && row === this.leaderboardList.firstElementChild;
+    this.floatingLocalRow.hidden = visible;
+  }
+
+  jumpToLocalRow() {
+    const row = this.document.querySelector("#leaderboard-local-row");
+    if (!row) return;
+    const reducedMotion = this.document.defaultView
+      ?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    row.scrollIntoView?.({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+    row.focus({ preventScroll: true });
+    this.updateFloatingLocalRow();
+  }
+
+  showHome(options = {}) {
+    this.stopLeaderboard();
     this.homeScreen.hidden = false;
     this.gameScreen.hidden = true;
-    this.start?.focus();
+    if (options.focusLeaderboard) this.leaderboardEntry?.focus();
+    else this.start?.focus();
   }
 
   showMatchmaking() {
+    this.stopLeaderboard();
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = true;
   }
 
   showGame() {
+    this.stopLeaderboard();
     this.homeScreen.hidden = true;
     this.gameScreen.hidden = false;
   }

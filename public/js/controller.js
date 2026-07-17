@@ -1,7 +1,10 @@
 import { getWinningLine } from "./game.js";
 import { createOpponent } from "./identity.js";
 import {
+  awardLeaderboardPoint,
   getOrCreatePlayer,
+  reconcileLeaderboardPlayer,
+  reloadPlayer,
   startPlayerGame,
   updatePlayerAfterMove,
   updatePlayerAfterResult
@@ -19,13 +22,16 @@ function createMatchScore() {
  * the DOM. The controller is the glue between the model and the view.
  */
 export class GameController {
-  constructor(model, view, timer = globalThis) {
+  constructor(model, view, timer = globalThis, clock) {
     this.model = model;
     this.view = view;
     this.timer = timer;
+    this.now = typeof clock === "function"
+      ? clock
+      : (typeof timer.now === "function" ? () => timer.now() : () => Date.now());
     this.gameStarted = false;
     this.matchmakingTimer = null;
-    this.player = getOrCreatePlayer();
+    this.player = getOrCreatePlayer(undefined, this.now());
     this.opponent = null;
     this.matchScore = createMatchScore();
     this.resultRecorded = false;
@@ -43,6 +49,10 @@ export class GameController {
       this.view.onCell(index, () => this.play(index));
     });
     this.view.onContinue(() => this.showHome());
+    this.view.onLeaderboardOpen?.(() => this.showLeaderboard());
+    this.view.onLeaderboardBack?.(() => this.leaveLeaderboard());
+    this.view.onLeaderboardRefresh?.((fromStorage = false) =>
+      this.refreshLeaderboardPlayer(fromStorage));
   }
 
   render() {
@@ -61,7 +71,9 @@ export class GameController {
   play(index) {
     if (!this.gameStarted || !this.model.makeMove(index)) return;
 
-    this.player = updatePlayerAfterMove(this.player, this.model.getState(), index);
+    this.player = updatePlayerAfterMove(
+      this.player, this.model.getState(), index, undefined, this.now()
+    );
     const state = this.model.getState();
     const completedRoundId = this.roundId;
     this.recordResult(state);
@@ -114,7 +126,7 @@ export class GameController {
     // startGame can also be called directly by an integration, so keep every
     // actual game covered even when matchmaking was skipped.
     this.opponent ||= createOpponent();
-    this.player = startPlayerGame(this.player);
+    this.player = startPlayerGame(this.player, undefined, this.now());
     this.view.showGame();
     this.model.reset();
     this.view.focusFirstCell();
@@ -126,12 +138,13 @@ export class GameController {
     this.view.resetFeedback();
     this.resultRecorded = false;
     this.roundId += 1;
-    this.player = startPlayerGame(this.player);
+    this.player = startPlayerGame(this.player, undefined, this.now());
     this.model.reset();
     this.view.focusFirstCell();
   }
 
   showHome() {
+    this.view.stopLeaderboard?.();
     this.stopMatchmaking();
     this.view.resetFeedback();
     this.opponent = null;
@@ -140,6 +153,23 @@ export class GameController {
     this.roundId += 1;
     this.model.reset();
     this.view.showHome();
+  }
+
+  showLeaderboard() {
+    this.player = this.refreshLeaderboardPlayer();
+    this.view.showLeaderboard(this.player, this.now());
+  }
+
+  leaveLeaderboard() {
+    this.view.stopLeaderboard?.();
+    this.view.showHome({ focusLeaderboard: true });
+  }
+
+  refreshLeaderboardPlayer(fromStorage = false) {
+    this.player = fromStorage
+      ? reloadPlayer(undefined, this.now())
+      : reconcileLeaderboardPlayer(this.player, this.now());
+    return this.player;
   }
 
   stopMatchmaking() {
@@ -153,12 +183,17 @@ export class GameController {
   recordResult(state) {
     if (this.resultRecorded || (!state.winner && !state.draw)) return;
 
-    this.player = updatePlayerAfterResult(this.player, state);
+    this.player = updatePlayerAfterResult(this.player, state, undefined, this.now());
     if (state.winner) {
+      const decisiveLocalWin = state.winner === "X"
+        && this.matchScore.X === MATCH_POINTS_TO_WIN - 1;
       this.matchScore = {
         ...this.matchScore,
         [state.winner]: this.matchScore[state.winner] + 1
       };
+      if (decisiveLocalWin) {
+        this.player = awardLeaderboardPoint(this.player, this.now());
+      }
     }
     this.resultRecorded = true;
     this.render();

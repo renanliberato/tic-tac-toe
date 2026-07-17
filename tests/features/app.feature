@@ -17,6 +17,19 @@ Feature: Playing a game of tic-tac-toe
     And the turn announcement says "Player X's turn"
     And the status says ""
 
+  Scenario: The weekly leaderboard shows standings and returns to home
+    Given I open the tic-tac-toe game
+    When I open the weekly leaderboard
+    Then the leaderboard screen is visible
+    And the home screen is hidden
+    And the leaderboard shows its position, player, and score columns
+    And the leaderboard shows the local player with score 0
+    And the leaderboard shows ranked opponents
+    When I return from the weekly leaderboard
+    Then the leaderboard screen is hidden
+    And the home screen is visible
+    And the leaderboard button has focus
+
   Scenario: Matchmaking completes before the game board is available
     Given I open the tic-tac-toe game
     When I start matchmaking
@@ -127,6 +140,9 @@ Feature: Playing a game of tic-tac-toe
       | losses       | 0 |
       | last_move    | {"cell":2,"mark":"X"} |
     When I click the "Continue" button
+    And I open the weekly leaderboard
+    Then the leaderboard shows the local player with score 1
+    When I return from the weekly leaderboard
     And I click the "Start game" button
     Then the X player score is 0
     And the O player score is 0
