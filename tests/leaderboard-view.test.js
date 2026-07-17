@@ -63,6 +63,7 @@ describe("leaderboard view and navigation", () => {
     const dom = createDom();
     dom.window.matchMedia = () => ({ matches: true });
     const view = new GameView(dom.window.document);
+    dom.window.document.querySelector(".game").style.setProperty("--page-scale", "1");
     view.showLeaderboard(player, LEADERBOARD_EPOCH + 6.9 * 86_400_000);
     const list = dom.window.document.querySelector("#leaderboard-list");
     const row = dom.window.document.querySelector("#leaderboard-local-row");
@@ -91,10 +92,32 @@ describe("leaderboard view and navigation", () => {
     view.stopLeaderboard();
   });
 
+  it("normalizes transformed geometry before centering at a reduced page scale", () => {
+    const dom = createDom();
+    dom.window.matchMedia = () => ({ matches: true });
+    const view = new GameView(dom.window.document);
+    dom.window.document.querySelector(".game").style.setProperty("--page-scale", "0.5");
+    view.showLeaderboard(player, LEADERBOARD_EPOCH + 6.9 * 86_400_000);
+    const list = dom.window.document.querySelector("#leaderboard-list");
+    const row = dom.window.document.querySelector("#leaderboard-local-row");
+    const scrollTo = vi.fn(({ top }) => { list.scrollTop = top; });
+    list.scrollTo = scrollTo;
+    list.getBoundingClientRect = () => ({ top: 100, height: 500, bottom: 600 });
+    row.getBoundingClientRect = () => ({ top: 850, height: 40, bottom: 890 });
+    Object.defineProperty(list, "clientHeight", { configurable: true, value: 1000 });
+    Object.defineProperty(row, "offsetHeight", { configurable: true, value: 80 });
+
+    dom.window.document.querySelector("#floating-local-row").click();
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1040, behavior: "auto" });
+    view.stopLeaderboard();
+  });
+
   it("requests smooth scrolling for normal-motion activation", () => {
     const dom = createDom();
     dom.window.matchMedia = () => ({ matches: false });
     const view = new GameView(dom.window.document);
+    dom.window.document.querySelector(".game").style.setProperty("--page-scale", "1");
     view.showLeaderboard(player, LEADERBOARD_EPOCH + 6.9 * 86_400_000);
     const list = dom.window.document.querySelector("#leaderboard-list");
     const row = dom.window.document.querySelector("#leaderboard-local-row");

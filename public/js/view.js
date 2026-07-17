@@ -663,6 +663,15 @@ export class GameView {
     this.floatingLocalRow.hidden = visible;
   }
 
+  getPageScale() {
+    const inlineScale = this.gameRoot?.style.getPropertyValue("--page-scale");
+    const computedScale = this.gameRoot
+      ? this.document.defaultView?.getComputedStyle(this.gameRoot)?.getPropertyValue("--page-scale")
+      : "";
+    const scale = Number.parseFloat(inlineScale || computedScale || "");
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
   jumpToLocalRow() {
     const row = this.document.querySelector("#leaderboard-local-row");
     const list = this.leaderboardList;
@@ -670,9 +679,10 @@ export class GameView {
 
     const listRect = list.getBoundingClientRect();
     const rowRect = row.getBoundingClientRect();
-    const listHeight = list.clientHeight || listRect.height;
-    const rowHeight = row.offsetHeight || rowRect.height;
-    const rowTop = list.scrollTop + rowRect.top - listRect.top;
+    const pageScale = this.getPageScale();
+    const listHeight = list.clientHeight || listRect.height / pageScale;
+    const rowHeight = row.offsetHeight || rowRect.height / pageScale;
+    const rowTop = list.scrollTop + (rowRect.top - listRect.top) / pageScale;
     const targetScrollTop = rowTop - (listHeight - rowHeight) / 2;
     const reducedMotion = this.document.defaultView
       ?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;

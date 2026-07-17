@@ -332,11 +332,13 @@ When("I prepare the leaderboard local row for scrolling", function () {
   assert.ok(row, "The local leaderboard row does not exist");
   assert.ok(floating, "The floating local row does not exist");
 
-  list.getBoundingClientRect = () => ({ top: 100, height: 400, bottom: 500 });
-  row.getBoundingClientRect = () => ({ top: 680, height: 80, bottom: 760 });
-  Object.defineProperty(list, "clientHeight", { configurable: true, value: 400 });
+  // Model the transformed viewport: client and offset dimensions remain in
+  // layout pixels while getBoundingClientRect reports scaled dimensions.
+  this.dom.window.document.querySelector(".game").style.setProperty("--page-scale", "0.5");
+  list.getBoundingClientRect = () => ({ top: 100, height: 500, bottom: 600 });
+  row.getBoundingClientRect = () => ({ top: 850, height: 40, bottom: 890 });
+  Object.defineProperty(list, "clientHeight", { configurable: true, value: 1000 });
   Object.defineProperty(row, "offsetHeight", { configurable: true, value: 80 });
-  list.scrollTop = 40;
   list.scrollTo = ({ top, behavior }) => {
     this.leaderboardScroll = { top, behavior };
     list.scrollTop = top;
@@ -358,7 +360,7 @@ Then("the local leaderboard row has focus", function () {
 });
 
 Then("the leaderboard scrolls the local row to the center", function () {
-  assert.deepEqual(this.leaderboardScroll, { top: 460, behavior: "smooth" });
+  assert.deepEqual(this.leaderboardScroll, { top: 1040, behavior: "smooth" });
 });
 
 Then("the page scroll position is unchanged", function () {
