@@ -71,11 +71,15 @@ for index, item in enumerate(questions, 1):
     except EOFError:
         print("\nrefine: input ended before all questions were answered", file=sys.stderr)
         raise SystemExit(3)
-    answers.append({
+    recorded = {
         "question": item["question"],
         "recommendation": item["recommendation"],
         "answer": answer,
-    })
+    }
+    if item.get("kind") == "FINAL_CONFIRMATION":
+        recorded["kind"] = "FINAL_CONFIRMATION"
+        recorded["confirmed"] = answer.strip().casefold() == "yes"
+    answers.append(recorded)
 with open(history_path, encoding="utf-8") as stream:
     history = json.load(stream)
 history["rounds"].append({"round": int(round_number), "answers": answers})
@@ -142,7 +146,9 @@ To ask the current frontier, write valid UTF-8 JSON in this exact shape:
 }
 Include every currently unblocked frontier question, with at least one question. Do not put questions only in your chat response. The CLI will display them one at a time and a new agent session will receive the answers.
 
-Final user confirmation required by the skill is mandatory. Treat confirmation of shared understanding as the last decision question; do not finish unless the history contains an explicit user answer confirming it. When and only when no design-tree frontier remains and that confirmation is present, create this exact file:
+Final user confirmation required by the skill is mandatory. Once no design-tree frontier remains, ask it as a separate round containing exactly one question explicitly identified with this machine-readable field:
+{"status": "ASK_QUESTIONS", "questions": [{"kind": "FINAL_CONFIRMATION", "question": "Does this capture the shared understanding? Answer yes to confirm, or explain what should change.", "recommendation": "Yes, if no decisions are missing."}]}
+The CLI records confirmed=true only when the complete user answer is "yes" (case-insensitive). Do not finish unless the latest answered round is this explicit final confirmation with confirmed=true. If the user does not confirm or any later question is needed, resolve the concern and ask a new final confirmation. When and only when that confirmation is present, create this exact file:
 $task_file
 Write a self-contained, implementation-ready Markdown task preserving the user's intent, settled decisions, relevant discovered facts, scope, constraints, and acceptance criteria. Then write this protocol JSON:
 {"status": "REFINE_FINISHED", "task_file": "$task_file"}
@@ -156,11 +162,13 @@ EOF
     fi
     [ -s "$response_file" ] || fail "agent did not create its response file in round $round"
 
-    status=$(python3 - "$response_file" <<'PY'
+    status=$(python3 - "$response_file" "$history_file" <<'PY'
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as stream:
         data = json.load(stream)
+    with open(sys.argv[2], encoding="utf-8") as stream:
+        history = json.load(stream)
     status = data.get("status")
     if status not in ("ASK_QUESTIONS", "REFINE_FINISHED"):
         raise ValueError("status must be ASK_QUESTIONS or REFINE_FINISHED")
@@ -173,6 +181,18 @@ try:
                 raise ValueError(f"question {number} is missing question text")
             if not isinstance(item.get("recommendation"), str) or not item["recommendation"].strip():
                 raise ValueError(f"question {number} is missing a recommendation")
+            if "kind" in item and item["kind"] != "FINAL_CONFIRMATION":
+                raise ValueError(f"question {number} has an unknown kind")
+        confirmations = [item for item in questions if item.get("kind") == "FINAL_CONFIRMATION"]
+        if confirmations and (len(questions) != 1 or len(confirmations) != 1):
+            raise ValueError("FINAL_CONFIRMATION must be the only question in its round")
+    else:
+        rounds = history.get("rounds")
+        latest_answers = rounds[-1].get("answers") if isinstance(rounds, list) and rounds else None
+        if (not isinstance(latest_answers, list) or len(latest_answers) != 1
+                or latest_answers[0].get("kind") != "FINAL_CONFIRMATION"
+                or latest_answers[0].get("confirmed") is not True):
+            raise ValueError("REFINE_FINISHED requires an answered, explicit final confirmation")
     print(status)
 except Exception as error:
     print(f"refine: invalid agent response: {error}", file=sys.stderr)
