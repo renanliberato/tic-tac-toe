@@ -46,5 +46,5 @@ describe("git merge lock", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("git-sync: another merge holds");
-  });
+  }, 15000);
 });

@@ -240,6 +240,40 @@ describe("screen visibility", () => {
   });
 });
 
+describe("game screen visibility", () => {
+  it("keeps a hidden game screen out of the rendered layout", () => {
+    const dom = new JSDOM(`
+      <style>${styles}</style>
+      <main class="game">
+        <section id="game-screen" hidden>Game</section>
+      </main>
+    `);
+    const gameScreen = dom.window.document.querySelector("#game-screen");
+
+    expect(gameScreen.hidden).toBe(true);
+    expect(dom.window.getComputedStyle(gameScreen).display).toBe("none");
+
+    dom.window.close();
+  });
+});
+
+describe("game screen layout", () => {
+  it("centers the gameplay column in the design canvas", () => {
+    const gameScreenRule = styles.match(/\.game #game-screen\s*\{([^}]*)\}/)?.[1] ?? "";
+
+    expect(gameScreenRule).toMatch(/(?:^|\n)\s*display:\s*flex\s*;/);
+    expect(gameScreenRule).toMatch(/(?:^|\n)\s*position:\s*relative\s*;/);
+    expect(gameScreenRule).toMatch(/(?:^|\n)\s*flex:\s*1 1 auto\s*;/);
+    expect(gameScreenRule).toMatch(/(?:^|\n)\s*flex-direction:\s*column\s*;/);
+    expect(gameScreenRule).toMatch(/(?:^|\n)\s*align-items:\s*center\s*;/);
+    expect(gameScreenRule).toMatch(/(?:^|\n)\s*justify-content:\s*center\s*;/);
+
+    const statusRule = styles.match(/\.game #game-screen \.status\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(statusRule).toMatch(/(?:^|\n)\s*position:\s*absolute\s*;/);
+    expect(statusRule).toMatch(/(?:^|\n)\s*bottom:\s*calc\(50% \+ var\(--board-half-width\) \+ 64px\)\s*;/);
+  });
+});
+
 describe("scaled game layout", () => {
   it("gives the home screen and text intentional design-canvas sizes", () => {
     expect(styles).toMatch(/\.game #home-screen\s*\{[^}]*width:\s*min\(100%,\s*var\(--home-width\)\)/s);
