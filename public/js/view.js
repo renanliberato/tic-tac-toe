@@ -310,7 +310,7 @@ export class GameView {
     }
     if (this.opponentScore) {
       this.opponentScore.textContent = opponentScore;
-      this.opponentScore.setAttribute("aria-label", `Opponent score: ${opponentScore}`);
+      this.opponentScore.setAttribute("aria-label", `Computer score: ${opponentScore}`);
     }
     if (this.playerPanel) this.playerPanel.dataset.score = localScore;
     if (this.opponentPanel) this.opponentPanel.dataset.score = opponentScore;

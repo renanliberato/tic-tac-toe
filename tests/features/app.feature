@@ -102,3 +102,4 @@ Feature: Playing against the Computer
     And the computer move completes
     Then the turn announcement says "Computer won!"
     And the result dialog says "Computer won!"
+    And the O player score is 3

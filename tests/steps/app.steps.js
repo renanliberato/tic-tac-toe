@@ -167,7 +167,7 @@ Then("the {word} player score is {int}", function (mark, expected) {
   assert.equal(this.dom.window.document.querySelector(id).textContent, String(expected));
   assert.equal(
     this.dom.window.document.querySelector(id).getAttribute("aria-label"),
-    `${mark === "X" ? "Your" : "Opponent"} score: ${expected}`
+    `${mark === "X" ? "Your" : "Computer"} score: ${expected}`
   );
 });
 

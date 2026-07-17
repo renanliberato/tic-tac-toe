@@ -247,7 +247,7 @@ describe("MVC game architecture", () => {
     expect(documentRef.querySelector("#player-score").textContent).toBe("0");
     expect(documentRef.querySelector("#opponent-score").textContent).toBe("0");
     expect(documentRef.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 0");
-    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 0");
+    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Computer score: 0");
     expect(documentRef.querySelector("[data-player=\"opponent\"]").hidden).toBe(false);
     expect([...view.cells].map((cell) => cell.textContent)).toEqual([
       "X", "X", "X", "O", "", "", "", "", ""
@@ -285,7 +285,7 @@ describe("MVC game architecture", () => {
     expect(documentRef.querySelector("#player-score").textContent).toBe("2");
     expect(documentRef.querySelector("#opponent-score").textContent).toBe("1");
     expect(documentRef.querySelector("#player-score").getAttribute("aria-label")).toBe("Your score: 2");
-    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Opponent score: 1");
+    expect(documentRef.querySelector("#opponent-score").getAttribute("aria-label")).toBe("Computer score: 1");
     expect(documentRef.querySelector("[data-player=\"local\"]").dataset.score).toBe("2");
     expect(documentRef.querySelector("[data-player=\"opponent\"]").dataset.score).toBe("1");
 
