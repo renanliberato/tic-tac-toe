@@ -63,6 +63,24 @@ describe("git merge lock", () => {
     expect(result.stderr).not.toContain("integer expression expected");
   });
 
+  it("normalizes a very large leading-zero timeout without repeated trimming", () => {
+    const repository = createRepository();
+    const sync = path.join(repository, "git-sync");
+    writeFileSync(sync, readFileSync(path.join(repositoryRoot, "git-sync"), "utf8"));
+    chmodSync(sync, 0o755);
+    const lock = mergeLockPath(repository);
+    writeFileSync(lock, "abandoned process\n");
+
+    const result = spawnSync("./git-sync", {
+      cwd: repository,
+      encoding: "utf8",
+      env: { ...env, GIT_WORKTREE_MERGE_LOCK_TIMEOUT: `${"0".repeat(100000)}1` }
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("git-sync: timed out after 1 seconds waiting for merge lock");
+  }, 10000);
+
   it("fails clearly instead of waiting forever on a stale merge lock", () => {
     const repository = createRepository();
     const sync = path.join(repository, "git-sync");
