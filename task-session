@@ -44,8 +44,13 @@ task_session() {
     for argument in "$@"; do
         command_text="${command_text}${command_text:+ }${argument}"
     done
-    "$@" >"$temporary" 2>&1
-    status=$?
+    # Run inside an if so a failing wrapped command remains observable even
+    # when this function was invoked by a caller using set -e.
+    if "$@" >"$temporary" 2>&1; then
+        status=0
+    else
+        status=$?
+    fi
     ended=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
     {
         printf '# Task session transcript\n\n'

@@ -57,6 +57,45 @@ release_lock() {
     fi
 }
 
+restore_primary_sync_transcript() {
+    if [ -n "${primary_sync_transcript_reserve-}" ]; then
+        if [ -e "$primary_sync_transcript" ]; then
+            printf 'git-worktree-merge: could not restore primary-sync transcript without overwriting: %s\n' \
+                "$primary_sync_transcript" >&2
+            return 1
+        fi
+        mv -- "$primary_sync_transcript_reserve" "$primary_sync_transcript" || return 1
+        primary_sync_transcript_reserve=''
+    fi
+}
+
+fold_primary_sync_transcript() {
+    [ -n "${primary_sync_transcript_reserve-}" ] || return 0
+
+    base="tasks/${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver"
+    # Match task-session's repeat convention: promote an existing unsuffixed
+    # transcript before assigning the reserved primary-sync attempt its suffix.
+    existing_count=$(find tasks -type f -name "${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver-[0-9][0-9].md" | wc -l | tr -d ' ')
+    if [ -f "${base}.md" ]; then
+        suffix=$(printf '%02d' "$((existing_count + 1))")
+        mv -- "${base}.md" "${base}-${suffix}.md" || return 1
+        existing_count=$((existing_count + 1))
+    fi
+    if [ "$existing_count" -eq 0 ]; then
+        destination="${base}.md"
+    else
+        suffix=$(printf '%02d' "$((existing_count + 1))")
+        destination="${base}-${suffix}.md"
+    fi
+    mv -- "$primary_sync_transcript_reserve" "$destination" || return 1
+    primary_sync_transcript_reserve=''
+
+    git add -A -- "${base}.md" "${base}"*.md || return 1
+    if ! git diff --cached --quiet; then
+        git commit --amend --no-edit > /dev/null || return 1
+    fi
+}
+
 cleanup_worktree() {
     if ! git worktree remove --force "$repo_root"; then
         printf 'git-worktree-merge: could not remove worktree: %s\n' "$repo_root" >&2
@@ -135,7 +174,41 @@ main() {
 
     cd "$main_root" || return 1
     [ -r ./task-session ] && . ./task-session
-    "$main_root/git-sync" || return 1
+    primary_sync_snapshot=''
+    primary_sync_transcript=''
+    primary_sync_transcript_reserve=''
+    if command -v task_session_enabled > /dev/null 2>&1 && task_session_enabled; then
+        primary_sync_snapshot=$(mktemp "${TMPDIR:-/tmp}/git-worktree-merge-${DEV_FLOW_TASK_ID}.XXXXXX") || return 1
+        git ls-files --others --exclude-standard -- \
+            "tasks/${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver"*.md > "$primary_sync_snapshot" || {
+            rm -f "$primary_sync_snapshot"
+            return 1
+        }
+    fi
+    if "$main_root/git-sync"; then
+        :
+    else
+        status=$?
+        rm -f "$primary_sync_snapshot"
+        return "$status"
+    fi
+    if [ -n "$primary_sync_snapshot" ]; then
+        for transcript in $(git ls-files --others --exclude-standard -- \
+            "tasks/${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver"*.md); do
+            if ! grep -F -x -- "$transcript" "$primary_sync_snapshot" > /dev/null; then
+                primary_sync_transcript=$transcript
+                break
+            fi
+        done
+        rm -f "$primary_sync_snapshot"
+        if [ -n "$primary_sync_transcript" ]; then
+            primary_sync_transcript_reserve=$(mktemp "${TMPDIR:-/tmp}/git-worktree-merge-${DEV_FLOW_TASK_ID}-session.XXXXXX") || return 1
+            if ! mv -- "$primary_sync_transcript" "$primary_sync_transcript_reserve"; then
+                rm -f "$primary_sync_transcript_reserve"
+                return 1
+            fi
+        fi
+    fi
 
     # The lock lives in the common Git directory so it is shared by the
     # primary checkout and every linked worktree.
@@ -148,17 +221,25 @@ main() {
         if [ "$status" -eq 1 ]; then
             printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
         fi
+        restore_primary_sync_transcript || :
         return "$status"
     fi
     trap release_lock INT TERM HUP EXIT
 
     if ! git fetch origin "$worktree_branch"; then
+        restore_primary_sync_transcript || :
         release_lock
         trap - INT TERM HUP EXIT
         return 1
     fi
 
     if git merge --no-edit "origin/$worktree_branch"; then
+        if ! fold_primary_sync_transcript; then
+            restore_primary_sync_transcript || :
+            release_lock
+            trap - INT TERM HUP EXIT
+            return 1
+        fi
         if ! cleanup_worktree; then
             release_lock
             trap - INT TERM HUP EXIT
@@ -173,12 +254,12 @@ main() {
     merge_head=$(git rev-parse --git-path MERGE_HEAD)
     if [ -f "$merge_head" ] || [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
         if ! git merge --abort; then
+            restore_primary_sync_transcript || :
             printf '%s\n' 'git-worktree-merge: could not abort the conflicted merge' >&2
             release_lock
             trap - INT TERM HUP EXIT
             return 1
         fi
-
         prompt=$(cat <<TASK
 Merge the worktree branch $worktree_branch into the primary branch in this
 repository. Start by running git fetch origin $worktree_branch and then
@@ -202,10 +283,17 @@ TASK
                 printf '%s\n' 'git-worktree-merge: conflict resolver did not complete the merge' >&2
                 status=1
             elif task_session_enabled; then
+                # The primary-sync transcript was reserved before the merge
+                # so a same-named branch artifact could not block either
+                # merge attempt. Fold it into the completed merge first.
+                fold_primary_sync_transcript || status=1
                 # This transcript is created in the primary checkout after
                 # the branch merge. Fold it into the merge result instead of
                 # leaving a post-merge observability-only change behind.
-                git add -- "tasks/${DEV_FLOW_TASK_ID}"-session-merge-conflict-resolver* || status=1
+                if [ "$status" -eq 0 ]; then
+                    git add -- "tasks/${DEV_FLOW_TASK_ID}"-session-merge-conflict-resolver* \
+                        "tasks/${DEV_FLOW_TASK_ID}"-session-sync-conflict-resolver* || status=1
+                fi
                 if [ "$status" -eq 0 ] && ! git diff --cached --quiet; then
                     git commit --amend --no-edit >/dev/null || status=1
                 fi
@@ -216,11 +304,15 @@ TASK
                 status=1
             fi
         fi
+        if [ "$status" -ne 0 ]; then
+            restore_primary_sync_transcript || :
+        fi
         release_lock
         trap - INT TERM HUP EXIT
         return "$status"
     fi
 
+    restore_primary_sync_transcript || :
     printf '%s\n' 'git-worktree-merge: git merge failed without leaving a conflict to resolve' >&2
     release_lock
     trap - INT TERM HUP EXIT
