@@ -23,6 +23,7 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
     exit 1
 }
 cd "$repo_root"
+[ -r ./task-session ] && . ./task-session
 
 if ! command -v mswea >/dev/null 2>&1; then
     printf '%s\n' 'code-review: mswea is required to run the review agents' >&2
@@ -97,7 +98,7 @@ while :; do
     printf '%s\n' "code-review: starting review iteration $review_iteration"
     rm -f "$review_file"
 
-    if ! mswea "$review_agent" --yolo --exit-immediately -t "$review_prompt" </dev/null; then
+    if ! task_session reviewer mswea "$review_agent" --yolo --exit-immediately -t "$review_prompt" </dev/null; then
         printf '%s\n' 'code-review: reviewer agent failed' >&2
         exit 1
     fi
@@ -157,7 +158,7 @@ while :; do
     rm -f "$review_backup"
     review_backup_owned=false
 
-    if ! mswea "$fix_agent" --yolo --exit-immediately -t "$fix_prompt" </dev/null; then
+    if ! task_session review-fixer mswea "$fix_agent" --yolo --exit-immediately -t "$fix_prompt" </dev/null; then
         printf '%s\n' 'code-review: fixing agent failed' >&2
         exit 1
     fi

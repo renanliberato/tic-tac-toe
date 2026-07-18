@@ -1,15 +1,31 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 const root = path.resolve(import.meta.dirname, "..");
 const temporaryDirectories = [];
+const temporaryWorktrees = [];
 const generatedTasks = [];
 
+function refineWorkspace() {
+  const directory = mkdtempSync(path.join(tmpdir(), "refine-worktree-test-"));
+  rmSync(directory, { recursive: true, force: true });
+  execFileSync("git", ["worktree", "add", "--detach", "--quiet", directory, "HEAD"], { cwd: root });
+  for (const name of ["refine", "task-session"]) {
+    copyFileSync(path.join(root, name), path.join(directory, name));
+    chmodSync(path.join(directory, name), 0o755);
+  }
+  temporaryWorktrees.push(directory);
+  return directory;
+}
+
 afterEach(() => {
+  for (const directory of temporaryWorktrees.splice(0)) {
+    execFileSync("git", ["worktree", "remove", "--force", directory], { cwd: root });
+  }
   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
   for (const task of generatedTasks.splice(0)) rmSync(task, { force: true });
 });
@@ -106,11 +122,12 @@ describe("refine", () => {
   });
 
   it("asks each generated question and creates the refined task", () => {
+    const workspace = refineWorkspace();
     const bin = fakeAgent();
     const log = path.join(bin, "prompts.log");
     const count = path.join(bin, "count");
     const result = spawnSync("./refine", ["Improve the game"], {
-      cwd: root,
+      cwd: workspace,
       input: "Families\nyes\nyes\n",
       encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_LOG: log, REFINE_COUNT: count, REFINE_MODEL: "test:model" },
@@ -122,8 +139,8 @@ describe("refine", () => {
     expect(result.stdout).toContain("[1/1] Does this capture the shared understanding?");
     expect(result.stdout).toMatch(/Refinement finished: \.\/tasks\/[a-f0-9]{6}-todo\.md/);
     const taskPath = result.stdout.match(/\.\/(tasks\/[a-f0-9]{6}-todo\.md)/)[1];
-    generatedTasks.push(path.join(root, taskPath));
-    expect(readFileSync(path.join(root, taskPath), "utf8")).toContain("# Refined task");
+    generatedTasks.push(path.join(workspace, taskPath));
+    expect(readFileSync(path.join(workspace, taskPath), "utf8")).toContain("# Refined task");
 
     const prompts = readFileSync(log, "utf8");
     expect(prompts).toContain("Improve the game");
@@ -136,11 +153,12 @@ describe("refine", () => {
   });
 
   it("answers every question automatically with recommendations and confirms the final round", () => {
+    const workspace = refineWorkspace();
     const bin = fakeAgent();
     const log = path.join(bin, "prompts.log");
     const count = path.join(bin, "count");
     const result = spawnSync("./refine", ["--auto", "Improve the game"], {
-      cwd: root,
+      cwd: workspace,
       encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_LOG: log, REFINE_COUNT: count, REFINE_MODEL: "test:model" },
     });
@@ -152,7 +170,7 @@ describe("refine", () => {
     expect(result.stdout).toMatch(/Refinement finished: \.\/tasks\/[a-f0-9]{6}-todo\.md/);
 
     const taskPath = result.stdout.match(/\.\/(tasks\/[a-f0-9]{6}-todo\.md)/)[1];
-    generatedTasks.push(path.join(root, taskPath));
+    generatedTasks.push(path.join(workspace, taskPath));
     const prompts = readFileSync(log, "utf8");
     expect(prompts).toContain("\"answer\": \"New players, for accessibility.\"");
     expect(prompts).toContain("\"answer\": \"yes\"");
@@ -161,9 +179,10 @@ describe("refine", () => {
   });
 
   it("prints only the saved task path for automation callers", () => {
+    const workspace = refineWorkspace();
     const bin = fakeAgent();
     const result = spawnSync("./refine", ["--auto", "--print-task-path", "Improve the game"], {
-      cwd: root,
+      cwd: workspace,
       encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_LOG: path.join(bin, "prompts.log"), REFINE_COUNT: path.join(bin, "count"), REFINE_MODEL: "test:model" },
     });
@@ -173,14 +192,15 @@ describe("refine", () => {
     expect(result.stderr).toContain("refine: consulting agent");
     expect(result.stderr).not.toContain("Refinement finished:");
     const taskPath = result.stdout.trim();
-    generatedTasks.push(path.join(root, taskPath.slice(2)));
+    generatedTasks.push(path.join(workspace, taskPath.slice(2)));
   });
 
   it("rejects an unrelated question tagged as final confirmation", () => {
+    const workspace = refineWorkspace();
     const bin = unrelatedConfirmationAgent();
     const count = path.join(bin, "count");
     const result = spawnSync("./refine", ["Improve the game"], {
-      cwd: root,
+      cwd: workspace,
       input: "yes\n",
       encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_COUNT: count, REFINE_MODEL: "test:model" },
@@ -194,9 +214,10 @@ describe("refine", () => {
   });
 
   it("rejects completion before the user confirms shared understanding", () => {
+    const workspace = refineWorkspace();
     const bin = prematureAgent();
     const result = spawnSync("./refine", ["Improve the game"], {
-      cwd: root,
+      cwd: workspace,
       encoding: "utf8",
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, REFINE_MODEL: "test:model" },
     });
@@ -207,7 +228,8 @@ describe("refine", () => {
   });
 
   it("prints usage without a prompt", () => {
-    const result = spawnSync("./refine", [], { cwd: root, encoding: "utf8" });
+    const workspace = refineWorkspace();
+    const result = spawnSync("./refine", [], { cwd: workspace, encoding: "utf8" });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("usage: ./refine [--auto] PROMPT");
   });

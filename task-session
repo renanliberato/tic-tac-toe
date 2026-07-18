@@ -1,0 +1,63 @@
+#!/bin/sh
+# Shared, dependency-free task-session capture for development orchestration.
+# Source this file after changing to the repository root.
+
+_task_session_valid_id() {
+    case ${DEV_FLOW_TASK_ID-} in
+        ??????) case $DEV_FLOW_TASK_ID in *[!0123456789abcdef]*) return 1;; esac ;;
+        *) return 1 ;;
+    esac
+}
+
+task_session_enabled() {
+    _task_session_valid_id && [ -d tasks ]
+}
+
+task_session() {
+    role=$1
+    shift
+    if ! task_session_enabled; then
+        "$@"
+        return $?
+    fi
+
+    base="tasks/${DEV_FLOW_TASK_ID}-session-${role}"
+    # Existing artifacts are the authoritative attempt count. On the second
+    # call promote the original unsuffixed transcript to -01 before writing
+    # -02; later calls append the next deterministic suffix.
+    if [ -f "${base}.md" ]; then
+        mv -- "${base}.md" "${base}-01.md"
+    fi
+    existing_count=$(find tasks -type f -name "${DEV_FLOW_TASK_ID}-session-${role}-[0-9][0-9].md" | wc -l | tr -d ' ')
+    if [ "$existing_count" -eq 0 ]; then
+        destination="${base}.md"
+        label=1
+    else
+        label=$((existing_count + 1))
+        suffix=$(printf '%02d' "$label")
+        destination="${base}-${suffix}.md"
+    fi
+
+    temporary=$(mktemp "${TMPDIR:-/tmp}/task-session-${DEV_FLOW_TASK_ID}-${role}.XXXXXX") || return 1
+    started=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    command_text=
+    for argument in "$@"; do
+        command_text="${command_text}${command_text:+ }${argument}"
+    done
+    "$@" >"$temporary" 2>&1
+    status=$?
+    ended=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    {
+        printf '# Task session transcript\n\n'
+        printf -- '- Role: `%s`\n' "$role"
+        printf -- '- Attempt: %s\n' "$label"
+        printf -- '- Model: `%s`\n' "${TASK_SESSION_MODEL:-${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}}"
+        printf -- '- Command: `%s`\n' "$command_text"
+        printf -- '- Started: `%s`\n' "$started"
+        printf -- '- Ended: `%s`\n' "$ended"
+        printf -- '- Exit status: %s\n\n' "$status"
+        cat "$temporary"
+    } >"$destination"
+    rm -f "$temporary"
+    return "$status"
+}

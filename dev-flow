@@ -1,65 +1,137 @@
 #!/bin/sh
-# Run the complete synchronized worktree development flow.
-# Set DEV_FLOW_MODEL before invoking this script to select the mswea model.
-# It defaults to codex:gpt-5.6-luna@high.
-#
-# Pass --refine-auto before the prompt to turn it into a committed task file
-# and have the implementation agent work from that file.
-#
-# This script deliberately performs `cd` itself. A child process such as
-# ./git-worktree-create or xargs cannot change the directory of this script's
-# caller, but this script can change its own directory before running the
-# remaining commands.
-
+# Run the complete task-scoped synchronized worktree development flow.
 set -eu
 
-repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
-    printf '%s\n' 'dev-flow: not inside a Git work tree' >&2
-    exit 1
-}
-cd "$repo_root" || exit 1
-
-# Resolve the model once at the orchestration boundary and export it so every
-# helper script, worktree, and retry loop uses the same agent model.
+fail() { printf 'dev-flow: %s\n' "$*" >&2; exit 1; }
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 'not inside a Git work tree'
+cd "$repo_root"
 DEV_FLOW_MODEL=${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}
 export DEV_FLOW_MODEL
 
-refine_auto=false
-if [ "${1-}" = '--refine-auto' ]; then
-    refine_auto=true
-    shift
-    [ "$#" -gt 0 ] || {
-        printf '%s\n' 'dev-flow: --refine-auto requires a prompt' >&2
-        exit 1
-    }
-fi
+mode=prompt
+case ${1-} in
+    --refine-auto) shift; [ "$#" -gt 0 ] || fail 'usage: ./dev-flow [--refine-auto] PROMPT | ./dev-flow --task tasks/<six-hex>-todo.md' ;;
+    --task) mode=task; shift; [ "$#" -eq 1 ] || fail 'usage: ./dev-flow --task tasks/<six-hex>-todo.md' ;;
+    '') fail 'usage: ./dev-flow PROMPT (a prompt is required)' ;;
+esac
+[ "$mode" = task ] || [ "$#" -gt 0 ] || fail 'usage: ./dev-flow PROMPT (a prompt is required)'
 
-./git-sync
-worktree_path=$(./git-worktree-create)
-cd "$worktree_path" || exit 1
+progress() {
+    # CI/pipes receive durable newline records. A terminal gets one concise
+    # redrawn checklist line and never receives raw child-agent output.
+    if [ -t 1 ]; then
+        printf '\r[dev-flow] %s\033[K' "$1"
+        case $1 in *'; complete') printf '\n' ;; esac
+    else
+        printf '[dev-flow] %s\n' "$1"
+    fi
+}
+allocate_id() {
+    while :; do
+        candidate=$(python3 - <<'PY'
+import secrets
+print(secrets.token_hex(3))
+PY
+) || fail 'could not allocate task id'
+        [ ! -e "tasks/${candidate}-todo.md" ] && [ ! -e "tasks/${candidate}-done.md" ] || continue
+        find tasks -name "${candidate}-*" -print -quit | grep -q . && continue
+        printf '%s\n' "$candidate"
+        return
+    done
+}
+validate_task() {
+    supplied=$1
+    canonical=$(cd "$(dirname "$supplied")" 2>/dev/null && printf '%s/%s\n' "$PWD" "$(basename "$supplied")") || fail "invalid task path: $supplied"
+    expected_prefix="$repo_root/tasks/"
+    case $canonical in "$expected_prefix"??????-todo.md) ;; *) fail 'task must be tasks/<six-lowercase-hex>-todo.md' ;; esac
+    name=${canonical#"$expected_prefix"}; id=${name%-todo.md}
+    case $id in ??????) case $id in *[!0123456789abcdef]*) fail 'task id must be six lowercase hex characters';; esac;; *) fail 'task id must be six lowercase hex characters';; esac
+    git ls-files --error-unmatch -- "$canonical" >/dev/null 2>&1 || fail 'task must be tracked in HEAD'
+    git diff --quiet HEAD -- "$canonical" || fail 'task must be unchanged from HEAD'
+    git diff --cached --quiet -- "$canonical" || fail 'task must be unchanged from HEAD'
+    printf '%s\n%s\n' "$id" "tasks/$name"
+}
 
-./git-save
-prompt=$*
-if [ "$refine_auto" = true ]; then
-    task_path=$(./refine --auto --print-task-path "$prompt")
-    [ -n "$task_path" ] || {
-        printf '%s\n' 'dev-flow: refine did not return a task path' >&2
-        exit 1
-    }
-    git add -- "$task_path"
-    git commit -m 'docs: add refined task'
-    # git-commit resets to the latest git-save checkpoint. Update it after the
-    # task commit so the task remains a separate commit from implementation.
-    ./git-save
-    prompt="implement $task_path. delete the task file after finishing"
-fi
-
-if [ "$#" -gt 0 ]; then
-    mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt"
+progress 'allocating task ID: active; synchronizing/refining/task artifacts/implementing/committing/tests/reviewing/merging: upcoming'
+mkdir -p tasks
+if [ "$mode" = prompt ]; then
+    task_id=$(allocate_id)
+    task_path="tasks/${task_id}-todo.md"
+    # Keep a truthful record even if synchronization/refinement is interrupted.
+    {
+        printf '# Incomplete refinement\n\n'
+        printf '> **REFINEMENT INCOMPLETE — do not implement this task yet.**\n\n'
+        printf '## Rough prompt\n\n%s\n' "$*"
+    } >"$task_path"
 else
-    mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately
+    # Extract only the syntactic ID now so a possible preflight sync-conflict
+    # session shares the eventual task prefix. Full canonical/tracked/clean
+    # validation is deliberately repeated after synchronization.
+    supplied_name=${1##*/}
+    case $supplied_name in
+        ??????-todo.md)
+            task_id=${supplied_name%-todo.md}
+            case $task_id in *[!0123456789abcdef]*) fail 'task id must be six lowercase hex characters' ;; esac
+            ;;
+        *) fail 'task must be tasks/<six-lowercase-hex>-todo.md' ;;
+    esac
+    task_path=
 fi
-./git-commit
-./ensure-tests
-./code-review
-./git-worktree-merge
+export DEV_FLOW_TASK_ID=$task_id
+progress 'allocating task ID: complete; synchronizing: active'
+./git-sync >/dev/null
+if [ "$mode" = task ]; then
+    set -- $(validate_task "$1")
+    task_id=$1; task_path=$2
+    export DEV_FLOW_TASK_ID=$task_id
+fi
+progress 'synchronizing: complete; creating worktree: active'
+worktree_path=$(./git-worktree-create)
+[ -n "$worktree_path" ] || fail 'could not create worktree'
+if [ "$mode" = prompt ]; then
+    # Preflight artifacts live in the primary checkout. Move only this task's
+    # artifacts into the linked worktree, where their lifecycle is committed.
+    if [ "$worktree_path" != "$repo_root" ]; then
+        cp tasks/"$task_id"-* "$worktree_path/tasks/" 2>/dev/null || true
+        rm -f tasks/"$task_id"-*
+    fi
+fi
+cd "$worktree_path"
+export DEV_FLOW_TASK_ID=$task_id
+. ./task-session
+
+if [ "$mode" = prompt ]; then
+    progress 'creating worktree: complete; refining (round 1): active'
+    task_path=$(./refine --auto --task-id "$task_id" --print-task-path "$*" 2>/dev/null) || fail 'refinement failed; todo and session artifacts were retained'
+    task_path=${task_path#./}
+    [ "$task_path" = "tasks/${task_id}-todo.md" ] || fail 'refine returned an invalid task path'
+    progress 'refining: complete; committing task artifacts: complete'
+else
+    progress 'creating worktree: complete; refining: skipped; committing task artifacts: already committed'
+fi
+
+./git-save >/dev/null
+progress 'implementing: active'
+implement_prompt="Implement the self-contained task in $task_path. Keep tasks/${task_id}-todo.md; the orchestration will rename it to done after implementation."
+if ! task_session implementer mswea "$DEV_FLOW_MODEL" --yolo --exit-immediately -t "$implement_prompt" </dev/null; then
+    fail 'implementation agent failed (see task session transcript)'
+fi
+# The committer must include the implementation transcript and the durable
+# rename. It is captured itself and then amended into its resulting commit.
+mv -- "tasks/${task_id}-todo.md" "tasks/${task_id}-done.md" || fail 'implementation removed the todo artifact'
+git add -A -- "tasks/${task_id}"-*
+progress 'implementing: complete; committing implementation/done artifacts: active'
+./git-commit </dev/null >/dev/null || fail 'implementation commit failed'
+git add -A -- "tasks/${task_id}"-*
+git commit --amend --no-edit >/dev/null || fail 'could not attach implementation artifacts'
+
+progress 'committing implementation/done artifacts: complete; ensuring tests (coverage, shell checks): active'
+./ensure-tests </dev/null >/dev/null || fail 'test assurance failed'
+progress 'ensuring tests: complete; test fixer: skipped; reviewing (iteration 1): active'
+./code-review </dev/null >/dev/null || fail 'review failed'
+# Any follow-up logs generated by helpers are part of the latest work commit.
+git add -A -- "tasks/${task_id}"-* 2>/dev/null || true
+if ! git diff --cached --quiet; then git commit --amend --no-edit >/dev/null; fi
+progress 'reviewing: complete; review fixer: skipped; merging (conflict resolver: upcoming): active'
+./git-worktree-merge >/dev/null || fail 'merge failed'
+progress 'merging: complete; complete'

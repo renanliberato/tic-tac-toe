@@ -37,6 +37,7 @@ repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
     exit 1
 }
 cd "$repo_root" || exit 1
+[ -r ./task-session ] && . ./task-session
 
 git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || {
     printf '%s\n' 'git-sync: could not locate the common Git directory' >&2
@@ -109,4 +110,4 @@ if ! command -v mswea >/dev/null 2>&1; then
     exit 1
 fi
 
-mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt" </dev/null
+task_session sync-conflict-resolver mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt" </dev/null

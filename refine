@@ -12,6 +12,7 @@ fail() {
 
 auto=false
 print_task_path=false
+requested_task_id=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --auto)
@@ -20,6 +21,12 @@ while [ "$#" -gt 0 ]; do
             ;;
         --print-task-path)
             print_task_path=true
+            shift
+            ;;
+        --task-id)
+            shift
+            [ "$#" -gt 0 ] || fail '--task-id requires a six-hex ID'
+            requested_task_id=$1
             shift
             ;;
         --)
@@ -31,7 +38,7 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
-[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT (optional: --print-task-path)'
+[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT (optional: --task-id six-hex, --print-task-path)'
 
 # Automation callers need a machine-readable stdout value, while the normal
 # interview remains visible to the user. Keep all progress on stderr when the
@@ -62,9 +69,7 @@ mkdir -p tasks
 session_dir=$(mktemp -d "${TMPDIR:-/tmp}/refine.XXXXXX") || fail 'could not create session directory'
 cleanup() {
     rm -rf "$session_dir"
-    if [ "${completed-false}" != true ] && [ -n "${task_file-}" ]; then
-        rm -f "$task_file"
-    fi
+    # Incomplete todos and captured rounds remain available after failure.
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -132,17 +137,39 @@ with open(sys.argv[1], "w", encoding="utf-8") as stream:
     stream.write("\n")
 PY
 
-task_file=$(python3 - "$repo_root/tasks" <<'PY'
+if [ -n "$requested_task_id" ]; then
+    case $requested_task_id in
+        ??????) case $requested_task_id in *[!0123456789abcdef]*) fail '--task-id must be six lowercase hex characters' ;; esac ;;
+        *) fail '--task-id must be six lowercase hex characters' ;;
+    esac
+    task_file="$repo_root/tasks/${requested_task_id}-todo.md"
+else
+    task_file=$(python3 - "$repo_root/tasks" <<'PY'
 from pathlib import Path
 import sys, uuid
 folder = Path(sys.argv[1])
 while True:
     candidate = folder / f"{uuid.uuid4().hex[:6]}-todo.md"
-    if not candidate.exists():
+    if (not candidate.exists()
+            and not candidate.with_name(candidate.name.replace("-todo.md", "-done.md")).exists()
+            and not any(folder.glob(candidate.name.replace("-todo.md", "-*") ))):
         print(candidate.resolve())
         break
 PY
 )
+fi
+task_id=$(basename "$task_file" | sed 's/-todo\.md$//')
+DEV_FLOW_TASK_ID=$task_id
+TASK_SESSION_MODEL=$model
+export DEV_FLOW_TASK_ID TASK_SESSION_MODEL
+. ./task-session
+if [ ! -e "$task_file" ]; then
+    {
+        printf '# Incomplete refinement\n\n'
+        printf '> **REFINEMENT INCOMPLETE — do not implement this task yet.**\n\n'
+        printf '## Rough prompt\n\n%s\n' "$original_task"
+    } > "$task_file"
+fi
 
 skill=$(cat "$skill_file")
 round=1
@@ -193,7 +220,9 @@ EOF
 )
 
     printf '%s\n' "refine: consulting agent (round $round)..."
-    if ! mswea "$model" --yolo --exit-immediately -c mini.yaml -c .agents/refine-mini.yaml -t "$prompt" </dev/null 3<&-; then
+    # Dedicated mini interviewer invocation:
+    # mswea "$model" --yolo --exit-immediately -c mini.yaml -c .agents/refine-mini.yaml -t "$prompt" </dev/null 3<&-
+    if ! task_session refiner mswea "$model" --yolo --exit-immediately -c mini.yaml -c .agents/refine-mini.yaml -t "$prompt" </dev/null 3<&-; then
         fail "agent failed in round $round"
     fi
     [ -s "$response_file" ] || fail "agent did not create its response file in round $round"
@@ -250,6 +279,10 @@ PY
         [ "$reported_task" = "$task_file" ] || fail 'agent reported an unexpected task file'
         [ -s "$task_file" ] || fail 'agent finished without creating a non-empty task file'
         relative_task=${task_file#"$repo_root"/}
+        git add -- "tasks/${task_id}"-*
+        if ! git commit -m 'docs: add refined task' >/dev/null; then
+            fail 'could not commit refined task artifacts'
+        fi
         completed=true
         if [ "$print_task_path" = true ]; then
             printf '%s\n' "./$relative_task" >&4
