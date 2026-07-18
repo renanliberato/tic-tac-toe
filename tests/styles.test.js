@@ -346,6 +346,24 @@ describe("game screen layout", () => {
   });
 });
 
+describe("battle-pass animation cascade", () => {
+  it("lets localized claim VFX override the initial entrance on the first cards", () => {
+    const enteringRule = ".game .battle-pass-list--entering .battle-pass-milestone:nth-child(-n+8)";
+    const vfxRule = ".game .battle-pass-list--entering .battle-pass-milestone.battle-pass-milestone--vfx:nth-child(-n+8)";
+    const enteringRuleIndex = styles.indexOf(enteringRule);
+    const vfxRuleIndex = styles.indexOf(vfxRule);
+    const vfxDeclaration = styles.slice(vfxRuleIndex, styles.indexOf("}", vfxRuleIndex));
+
+    expect(enteringRuleIndex).toBeGreaterThanOrEqual(0);
+    expect(vfxRuleIndex).toBeGreaterThan(enteringRuleIndex);
+    expect(vfxDeclaration).toMatch(/animation:\s*battle-pass-card-pulse\s+\.6s\s+ease-out\s+both/);
+  });
+
+  it("keeps the first-card VFX override disabled for reduced motion", () => {
+    expect(styles).toMatch(/\.game \.battle-pass-list--entering \.battle-pass-milestone\.battle-pass-milestone--vfx:nth-child\(-n\+8\),\s*\n\s*\.game \.battle-pass-particle \{ animation: none; \}/);
+  });
+});
+
 describe("scaled game layout", () => {
   it("gives the home screen and title intentional design-canvas sizes", () => {
     expect(styles).toMatch(/\.game #home-screen\s*\{[^}]*width:\s*min\(100%,\s*var\(--home-width\)\)/s);
