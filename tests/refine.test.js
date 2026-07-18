@@ -21,6 +21,10 @@ function fakeAgent() {
   writeFileSync(executable, `#!/usr/bin/env node
 const fs = require("node:fs");
 const args = process.argv.slice(2);
+const configs = args.filter((argument, index) => args[index - 1] === "-c");
+if (configs.join("|") !== "mini.yaml|.agents/refine-mini.yaml") {
+  throw new Error("refine must use its dedicated mini config; received " + configs.join("|"));
+}
 const prompt = args[args.indexOf("-t") + 1];
 fs.appendFileSync(process.env.REFINE_LOG, prompt + "\\n---PROMPT---\\n");
 const response = prompt.match(/creating exactly this JSON file:\\n([^\\n]+)/)[1];
@@ -94,7 +98,11 @@ fs.writeFileSync(response, JSON.stringify({status:"REFINE_FINISHED",task_file:ta
 describe("refine", () => {
   it("does not expose the user input descriptor to agents", () => {
     const source = readFileSync(path.join(root, "refine"), "utf8");
-    expect(source).toContain("mswea \"$model\" --yolo --exit-immediately -t \"$prompt\" </dev/null 3<&-");
+    expect(source).toContain("mswea \"$model\" --yolo --exit-immediately -c mini.yaml -c .agents/refine-mini.yaml -t \"$prompt\" </dev/null 3<&-");
+    const config = readFileSync(path.join(root, ".agents", "refine-mini.yaml"), "utf8");
+    expect(config).toContain("instance_template: '{{task}}'");
+    expect(config).toContain("echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT");
+    expect(config).toMatch(/Do not send a\s+tool-less final chat response/);
   });
 
   it("asks each generated question and creates the refined task", () => {
