@@ -15,12 +15,6 @@
 
         <section id="home-screen" class="screen" aria-labelledby="home-title">
             <div class="home-utility-row">
-                <button id="daily-gifts-launcher" class="daily-gifts-launcher" type="button" aria-label="Daily gifts">
-                    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-                        <path d="M14 12h36a6 6 0 0 1 6 6v34H8V18a6 6 0 0 1 6-6Z" />
-                        <path d="M8 24h48M20 7v11M44 7v11M18 33h8v7h-8zm20 0h8v7h-8zM18 44h8v7h-8z" />
-                    </svg>
-                </button>
                 <div id="coin-holder" data-coin-holder class="coin-holder" role="group" aria-label="Coin balance: 0">
                     <span class="coin-art" aria-hidden="true">¢</span>
                     <span id="coin-amount" data-coin-amount class="coin-amount">0000</span>
@@ -28,6 +22,14 @@
                 </div>
                 <button id="open-profile" class="profile-button" type="button" aria-label="Open profile">
                     <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><circle cx="24" cy="16" r="8"/><path d="M9 41c1-10 7-15 15-15s14 5 15 15"/></svg>
+                </button>
+            </div>
+            <div class="home-widget-list home-widget-list--left" role="group" aria-label="Home widgets">
+                <button id="daily-gifts-launcher" class="daily-gifts-launcher" type="button" aria-label="Daily gifts">
+                    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                        <path d="M14 12h36a6 6 0 0 1 6 6v34H8V18a6 6 0 0 1 6-6Z" />
+                        <path d="M8 24h48M20 7v11M44 7v11M18 33h8v7h-8zm20 0h8v7h-8zM18 44h8v7h-8z" />
+                    </svg>
                 </button>
             </div>
             <p id="coin-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -45,6 +47,7 @@
                 <span class="home-preview-cell home-preview-cell--o" style="--preview-delay: 1.05s"><svg class="mark-icon" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><circle class="mark-icon__stroke" cx="50" cy="50" r="29" /></svg></span>
             </div>
 
+            <div class="home-widget-list home-widget-list--right" role="group" aria-label="Home widgets">
             <button id="open-leaderboard" class="leaderboard-entry" type="button" aria-label="Open leaderboard">
                 <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
                     <path d="M20 8h24v9c0 9-4 16-12 20-8-4-12-11-12-20V8Zm0 5H10v5c0 8 5 14 13 15M44 13h10v5c0 8-5 14-13 15M32 37v10m-11 7h22M25 47h14v7" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -56,6 +59,7 @@
                     <path d="m22 32 7 7 14-15" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
+            </div>
             <div class="start-game-wrap">
                 <button id="start-game" type="button" aria-label="Play">Start game</button>
                 <div class="win-streak" data-win-streak role="status" aria-live="polite" aria-atomic="true">
