@@ -390,6 +390,66 @@ async function readBattlePassAnimationsInBrowser(executablePath) {
   }
 }
 
+function battlePassStaircaseFixture() {
+  const row = (side) => `
+    <div class="battle-pass-row battle-pass-row--${side}">
+      <button class="battle-pass-milestone" type="button">Milestone</button>
+      <span class="battle-pass-connector battle-pass-connector--${side}"></span>
+      <span class="battle-pass-rail__node"></span>
+    </div>`;
+
+  return `<!doctype html>
+    <meta charset="utf-8">
+    <style>${styles}</style>
+    <main class="game">
+      <div class="battle-pass-scroll-content">${row("left")}${row("right")}</div>
+    </main>`;
+}
+
+async function measureBattlePassStaircaseInBrowser(executablePath) {
+  const directory = mkdtempSync(join(tmpdir(), "battle-pass-staircase-"));
+  const fixturePath = join(directory, "fixture.html");
+  writeFileSync(fixturePath, battlePassStaircaseFixture());
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-gpu", "--disable-background-networking"]
+    });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1125, height: 900 });
+    await page.goto(pathToFileURL(fixturePath).href, { waitUntil: "load", timeout: 15000 });
+    return await page.evaluate(() => [...document.querySelectorAll(".battle-pass-row")].map((row) => {
+      const center = (selector) => {
+        const rect = row.querySelector(selector).getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      };
+      return {
+        card: center(".battle-pass-milestone"),
+        connector: center(".battle-pass-connector"),
+        node: center(".battle-pass-rail__node")
+      };
+    }));
+  } finally {
+    await browser?.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+describe("battle-pass staircase layout", () => {
+  it("vertically aligns each odd and even card, connector, and node in a browser", async () => {
+    const layout = await measureBattlePassStaircaseInBrowser(browserPath());
+
+    expect(layout).toHaveLength(2);
+    for (const { card, connector, node } of layout) {
+      expect(connector).toBeCloseTo(card, 5);
+      expect(node).toBeCloseTo(card, 5);
+    }
+  }, 30000);
+});
+
 describe("battle-pass animation cascade", () => {
   it("composes localized claim VFX with the initial entrance on the first cards", () => {
     const enteringRule = ".game .battle-pass-list--entering .battle-pass-milestone:nth-child(-n+8)";

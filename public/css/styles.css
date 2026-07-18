@@ -1286,8 +1286,8 @@ body {
 .game .battle-pass-rail__fill { height: max(0px, calc(var(--battle-pass-fill) - 160px)); background: linear-gradient(#f59e0b, #06b6d4, #7c3aed); box-shadow: 0 0 22px #06b6d4; transition: height .4s ease-out; }
 .game .battle-pass-row { position: relative; z-index: 1; display: grid; min-width: 0; min-height: 320px; grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr); align-items: center; }
 .game .battle-pass-milestone { position: relative; display: grid; min-width: 0; min-height: 320px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 20px 28px; box-sizing: border-box; margin: 0; padding: 34px 34px; overflow: hidden; border: 3px solid var(--primary-light, currentColor); text-align: left; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
-.game .battle-pass-row--left .battle-pass-milestone { grid-column: 1; }
-.game .battle-pass-row--right .battle-pass-milestone { grid-column: 3; }
+.game .battle-pass-row--left .battle-pass-milestone { grid-row: 1; grid-column: 1; }
+.game .battle-pass-row--right .battle-pass-milestone { grid-row: 1; grid-column: 3; }
 .game .battle-pass-milestone:hover:not(:disabled),
 .game .battle-pass-milestone:focus-visible { transform: translateY(-5px); box-shadow: 0 0 0 4px rgb(6 182 212 / .25), 0 12px 30px rgb(0 0 0 / .16); }
 .game .battle-pass-milestone__level { font-size: 58px; line-height: 1.05; }
@@ -1299,7 +1299,7 @@ body {
 .game .battle-pass-milestone__reward-label { white-space: nowrap; }
 .game .battle-pass-milestone__coin { display: inline-grid; width: 96px; height: 96px; flex: 0 0 auto; place-items: center; border: 5px solid #9b6b00; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff4a3, #f5b82e 45%, #b7791f); box-shadow: inset 0 0 0 4px rgb(255 255 255 / .35), 0 0 18px rgb(245 184 46 / .68); color: #7c4a00; font-family: Georgia, serif; font-size: 54px; font-weight: 800; line-height: 1; }
 .game .battle-pass-milestone__action { grid-column: 1 / -1; font-weight: 800; text-align: right; }
-.game .battle-pass-rail__node { z-index: 2; display: block; width: 34px; height: 34px; grid-column: 2; align-self: center; justify-self: center; box-sizing: border-box; border: 6px solid rgb(124 58 237 / .58); border-radius: 50%; background: var(--main-background, Canvas); box-shadow: 0 0 12px rgb(124 58 237 / .42); }
+.game .battle-pass-rail__node { z-index: 2; display: block; width: 34px; height: 34px; grid-row: 1; grid-column: 2; align-self: center; justify-self: center; box-sizing: border-box; border: 6px solid rgb(124 58 237 / .58); border-radius: 50%; background: var(--main-background, Canvas); box-shadow: 0 0 12px rgb(124 58 237 / .42); }
 .game .battle-pass-rail__node--filled { border-color: #06b6d4; background: #06b6d4; box-shadow: 0 0 17px rgb(6 182 212 / .82); }
 .game .battle-pass-rail__node--target { width: 48px; height: 48px; border: 7px solid #f59e0b; border-radius: 5px; background: var(--main-background, Canvas); box-shadow: 0 0 0 11px rgb(245 158 11 / .18), 0 0 27px #f59e0b; animation: battle-pass-target-pulse 1.8s ease-in-out infinite; transform: rotate(45deg); }
 .game .battle-pass-rail__node--flare { animation: battle-pass-node-flare .6s ease-out both; }
