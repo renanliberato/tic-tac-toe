@@ -844,7 +844,13 @@ Given("a running research helper service with a {string} Google response", funct
       url: "https://www.google.com/sorry/index?continue=search",
       html: `<main id="search">${organicResults()}</main><p>Our systems have detected unusual traffic from your computer network.</p>`
     },
-    insufficient: { html: `<main id="search">${organicResults(1)}</main>` }
+    insufficient: { html: `<main id="search">${organicResults(1)}</main>` },
+    "in-results-navigation": {
+      html: `<main id="search">${organicResults(9)}<article><a href="https://www.google.com/search?q=more+evidence"><h3>More results</h3></a></article></main>`
+    },
+    "canonical-duplicate": {
+      html: `<main id="search">${organicResults(9)}<article><a href="https://source0.example/article?utm_source=google#duplicate"><h3>Duplicate result</h3></a></article></main>`
+    }
   };
   assert.ok(pages[response], `Unknown Google response fixture: ${response}`);
   this.researchService = startResearchService(this.researchWorkspace, pages[response]);

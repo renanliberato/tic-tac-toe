@@ -167,11 +167,13 @@ describe("research helper", () => {
       `<article><a href="https://source${index}.example/article"><h3>Organic result ${index}</h3></a></article>`
     ).join("");
     const dom = new JSDOM(`
-      <nav>
-        <a href="https://www.google.com/preferences">Settings</a>
-        <a href="https://support.google.com/search">Learn more</a>
-      </nav>
-      <main id="search">${results}</main>
+      <main id="search">
+        <nav>
+          <a href="https://www.google.com/preferences"><h3>Settings</h3></a>
+          <a href="https://support.google.com/search"><h3>Learn more</h3></a>
+        </nav>
+        ${results}
+      </main>
     `, { url: "https://www.google.com/search?q=evidence" });
     const boundary = new BrowserBoundary({ maxSearches: 1, maxOpens: 10 });
     boundary.page = {
@@ -187,6 +189,46 @@ describe("research helper", () => {
     );
     expect(handles.map(handle => handle.url)).not.toContain("https://www.google.com/preferences");
     expect(handles.map(handle => handle.url)).not.toContain("https://support.google.com/search");
+  });
+
+  it("rejects an in-results Google search navigation heading as an organic result", async () => {
+    const results = Array.from({ length: 9 }, (_, index) =>
+      `<article><a href="https://source${index}.example/article"><h3>Organic result ${index}</h3></a></article>`
+    ).join("");
+    const dom = new JSDOM(`
+      <main id="search">
+        ${results}
+        <article><a href="https://www.google.com/search?q=more+evidence"><h3>More results</h3></a></article>
+      </main>
+    `, { url: "https://www.google.com/search?q=evidence" });
+    const boundary = new BrowserBoundary({ maxSearches: 1, maxOpens: 10 });
+    boundary.page = {
+      $$eval: async (selector, callback) => callback([...dom.window.document.querySelectorAll(selector)])
+    };
+    boundary.goto = async () => {};
+
+    await expect(boundary.search("evidence")).rejects.toThrow("fewer than ten organic results");
+    expect(boundary.handles.size).toBe(0);
+  });
+
+  it("deduplicates canonical organic result destinations before enforcing the minimum", async () => {
+    const results = Array.from({ length: 10 }, (_, index) => {
+      const url = index === 9
+        ? "https://source0.example/article?utm_source=google#duplicate"
+        : `https://source${index}.example/article`;
+      return `<article><a href="${url}"><h3>Organic result ${index}</h3></a></article>`;
+    }).join("");
+    const dom = new JSDOM(`<main id="search">${results}</main>`, {
+      url: "https://www.google.com/search?q=evidence"
+    });
+    const boundary = new BrowserBoundary({ maxSearches: 1, maxOpens: 10 });
+    boundary.page = {
+      $$eval: async (selector, callback) => callback([...dom.window.document.querySelectorAll(selector)])
+    };
+    boundary.goto = async () => {};
+
+    await expect(boundary.search("evidence")).rejects.toThrow("fewer than ten organic results");
+    expect(boundary.handles.size).toBe(0);
   });
 
   it("rejects CAPTCHA pages before their anchors can become Google-result handles", async () => {

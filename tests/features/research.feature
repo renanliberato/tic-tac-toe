@@ -30,6 +30,8 @@ Feature: Task-scoped research
     Then the research helper rejects the search as a "<reason>"
 
     Examples:
-      | response            | reason                |
-      | challenge           | challenge page                 |
-      | insufficient        | fewer than ten organic results |
+      | response               | reason                           |
+      | challenge              | challenge page                   |
+      | insufficient           | fewer than ten organic results   |
+      | in-results-navigation  | fewer than ten organic results   |
+      | canonical-duplicate    | fewer than ten organic results   |

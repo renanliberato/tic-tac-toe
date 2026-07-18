@@ -7,6 +7,8 @@ import readline from 'node:readline';
 
 const tracking = /^(utm_[^=]+|gclid|fbclid|mc_[^=]+|ref|source)$/i;
 const routes = new Set(['Google result', 'one-hop subpage']);
+const googleHost = /(^|\.)google\.[a-z]{2,}(?:\.[a-z]{2})?$/i;
+const googleNavigationPath = /^\/(?:search|webhp|preferences|setprefs|advanced_search|sorry)(?:\/|$)/i;
 
 export function canonicalUrl(input) {
   const u = new URL(input);
@@ -137,16 +139,29 @@ export class BrowserBoundary {
         text.includes('our systems have detected unusual traffic') ||
         text.includes("to continue, please verify that you're not a robot") ||
         text.includes('why did this happen?');
-      const anchors = [...doc.querySelectorAll('#search a[href], #rso a[href]')];
-      const rows = anchors.map(a => {
+      // Google marks organic cards with .g or .MjjYud. article also covers the
+      // semantic card markup used by Google-compatible result pages.
+      const cards = [...doc.querySelectorAll('#search .g, #rso .g, #search .MjjYud, #rso .MjjYud, #search article, #rso article')];
+      const rows = cards.flatMap(card => [...card.querySelectorAll('a[href]')].map(a => {
         const heading = a.querySelector('h3');
         return { title: (heading?.textContent || '').trim(), url: a.href };
-      }).filter(x => x.title && /^https?:/.test(x.url));
-      return { challenge, rows: rows.slice(0, 20) };
+      })).filter(x => x.title && /^https?:/.test(x.url));
+      return { challenge, rows };
     });
     if (search.challenge) throw new Error('Google search returned a challenge page');
-    if (search.rows.length < 10) throw new Error('Google search returned fewer than ten organic results');
-    return search.rows.map((x, i) => {
+    const destinations = new Set();
+    const rows = [];
+    for (const result of search.rows) {
+      let url;
+      try { url = canonicalUrl(result.url); } catch { continue; }
+      const parsed = new URL(url);
+      if (googleHost.test(parsed.hostname) && googleNavigationPath.test(parsed.pathname)) continue;
+      if (destinations.has(url)) continue;
+      destinations.add(url);
+      rows.push({ ...result, url });
+    }
+    if (rows.length < 10) throw new Error('Google search returned fewer than ten organic results');
+    return rows.slice(0, 20).map((x, i) => {
       const h = 'g' + this.searches + '-' + i;
       this.handles.set(h, { ...x, route: 'Google result' });
       return { handle: h, title: x.title, url: x.url };
