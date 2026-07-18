@@ -807,12 +807,36 @@ export class GameView {
     this.floatingLocalRow.hidden = visible;
   }
 
+  getPageScale() {
+    const inlineScale = this.gameRoot?.style.getPropertyValue("--page-scale");
+    const computedScale = this.gameRoot
+      ? this.document.defaultView?.getComputedStyle(this.gameRoot)?.getPropertyValue("--page-scale")
+      : "";
+    const scale = Number.parseFloat(inlineScale || computedScale || "");
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
   jumpToLocalRow() {
     const row = this.document.querySelector("#leaderboard-local-row");
-    if (!row) return;
+    const list = this.leaderboardList;
+    if (!row || !list) return;
+
+    const listRect = list.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const pageScale = this.getPageScale();
+    const listHeight = list.clientHeight || listRect.height / pageScale;
+    const rowHeight = row.offsetHeight || rowRect.height / pageScale;
+    const rowTop = list.scrollTop + (rowRect.top - listRect.top) / pageScale;
+    const targetScrollTop = rowTop - (listHeight - rowHeight) / 2;
     const reducedMotion = this.document.defaultView
       ?.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    row.scrollIntoView?.({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+    const behavior = reducedMotion ? "auto" : "smooth";
+
+    if (typeof list.scrollTo === "function") {
+      list.scrollTo({ top: targetScrollTop, behavior });
+    } else {
+      list.scrollTop = targetScrollTop;
+    }
     row.focus({ preventScroll: true });
     this.updateFloatingLocalRow();
   }

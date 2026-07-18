@@ -406,6 +406,49 @@ When("I return from the battle pass", function () {
   button.click();
 });
 
+When("I prepare the leaderboard local row for scrolling", function () {
+  const list = this.dom.window.document.querySelector("#leaderboard-list");
+  const row = this.dom.window.document.querySelector("#leaderboard-local-row");
+  const floating = this.dom.window.document.querySelector("#floating-local-row");
+  assert.ok(list, "The leaderboard list does not exist");
+  assert.ok(row, "The local leaderboard row does not exist");
+  assert.ok(floating, "The floating local row does not exist");
+
+  // Model the transformed viewport: client and offset dimensions remain in
+  // layout pixels while getBoundingClientRect reports scaled dimensions.
+  this.dom.window.document.querySelector(".game").style.setProperty("--page-scale", "0.5");
+  list.getBoundingClientRect = () => ({ top: 100, height: 500, bottom: 600 });
+  row.getBoundingClientRect = () => ({ top: 850, height: 40, bottom: 890 });
+  Object.defineProperty(list, "clientHeight", { configurable: true, value: 1000 });
+  Object.defineProperty(row, "offsetHeight", { configurable: true, value: 80 });
+  list.scrollTo = ({ top, behavior }) => {
+    this.leaderboardScroll = { top, behavior };
+    list.scrollTop = top;
+  };
+  floating.hidden = false;
+  this.dom.window.document.documentElement.scrollTop = 37;
+  this.pageScrollTop = this.dom.window.document.documentElement.scrollTop;
+});
+
+When("I activate the floating local leaderboard row", function () {
+  this.dom.window.document.querySelector("#floating-local-row").click();
+});
+
+Then("the local leaderboard row has focus", function () {
+  assert.equal(
+    this.dom.window.document.activeElement,
+    this.dom.window.document.querySelector("#leaderboard-local-row")
+  );
+});
+
+Then("the leaderboard scrolls the local row to the center", function () {
+  assert.deepEqual(this.leaderboardScroll, { top: 1040, behavior: "smooth" });
+});
+
+Then("the page scroll position is unchanged", function () {
+  assert.equal(this.dom.window.document.documentElement.scrollTop, this.pageScrollTop);
+});
+
 When("another browser tab changes the leaderboard score to {int}", function (score) {
   const storage = this.dom.window.localStorage;
   const oldValue = storage.getItem("tic-tac-toe-player");
