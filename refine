@@ -193,7 +193,7 @@ EOF
 )
 
     printf '%s\n' "refine: consulting agent (round $round)..."
-    if ! mswea "$model" --yolo --exit-immediately -t "$prompt" </dev/null 3<&-; then
+    if ! mswea "$model" --yolo --exit-immediately -c mini.yaml -c .agents/refine-mini.yaml -t "$prompt" </dev/null 3<&-; then
         fail "agent failed in round $round"
     fi
     [ -s "$response_file" ] || fail "agent did not create its response file in round $round"
