@@ -1,0 +1,10 @@
+import { createFloorIsLavaField, getFloorIsLavaPositions, getFloorIsLavaWindow, getFloorIsLavaPayout } from "../public/js/floor-is-lava.js";
+import { getOrCreatePlayer, commitFloorIsLavaResult } from "../public/js/player.js";
+const values = new Map(); const storage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v) };
+const at = new Date(2026, 5, 10, 8); let player = getOrCreatePlayer(storage, at);
+const field = createFloorIsLavaField(at); console.log(field.opponents.length, field.finisherCount, getFloorIsLavaPayout(at), getFloorIsLavaWindow(at).phase);
+console.log(getFloorIsLavaPositions(at, at).map(({ level }) => level).join(','));
+const expected = { date: player.floor_is_lava.date, revision: 0, stage: 1, started_at: at.getTime() };
+const committed = commitFloorIsLavaResult(player, expected, "win", storage, at, { rounds: 3, wins: 3 });
+console.log(committed.accepted, committed.player.floor_is_lava.wins, committed.player.games_played);
+console.log(commitFloorIsLavaResult(player, expected, "win", storage, at).accepted);

@@ -1,5 +1,6 @@
 import { getWinningLine } from "./game.js";
 import { getBattlePassCycle } from "./battle-pass.js";
+import { createFloorIsLavaField, getFloorIsLavaStatus } from "./floor-is-lava.js";
 import { createOpponent } from "./identity.js";
 import {
   awardLeaderboardPoint,
@@ -17,6 +18,9 @@ import {
   activatePlayerStyle,
   claimDailyGift,
   readLatestPlayer,
+  commitFloorIsLavaResult,
+  consumeFloorIsLavaProgress,
+  getFloorIsLavaAttempt,
   PLAYER_STORAGE_KEY
 } from "./player.js";
 
@@ -59,6 +63,10 @@ export class GameController {
     this.scheduledPendingCoins = 0;
     this.startupGiftHandled = false;
     this.pendingBattlePassVfx = null;
+    this.eventMatch = null;
+    this.eventRoundStats = null;
+    this.floorIsLavaRefreshTimer = null;
+    this.homeProgressQueued = false;
 
     this.model.subscribe(() => this.render());
     this.bindViewEvents();
@@ -73,7 +81,7 @@ export class GameController {
     this.view.cells.forEach((_, index) => {
       this.view.onCell(index, () => this.play(index));
     });
-    this.view.onContinue(() => this.showHome());
+    this.view.onContinue(() => this.eventMatch ? this.showFloorIsLava() : this.showHome());
     this.view.onLeaderboardOpen?.(() => this.showLeaderboard());
     this.view.onLeaderboardBack?.(() => this.leaveLeaderboard());
     this.view.onBattlePassOpen?.(() => this.showBattlePass());
@@ -87,6 +95,9 @@ export class GameController {
     this.view.onStylesBack?.(() => this.showProfileFromStyles());
     this.view.onStyle?.((styleId, tile) => this.activateStyle(styleId, tile));
     this.view.onDailyGiftOpen?.(() => this.openDailyGift(this.view.dailyGiftLauncher));
+    this.view.onFloorIsLavaOpen?.(() => this.showFloorIsLava());
+    this.view.onFloorIsLavaBack?.(() => this.showHome({ focusFloorIsLava: true }));
+    this.view.onFloorIsLavaStart?.(() => this.startFloorIsLavaMatch());
   }
 
   render() {
@@ -114,10 +125,13 @@ export class GameController {
       this.render();
       return;
     }
-    this.player = updatePlayerAfterMove(
-      this.player, this.model.getState(), index, undefined, this.now()
-    );
     const acceptedState = this.model.getState();
+    if (this.eventMatch) {
+      this.eventRoundStats.moves += 1;
+      this.eventRoundStats.last_move = { cell: index, mark: acceptedState.board[index] };
+    } else {
+      this.player = updatePlayerAfterMove(this.player, acceptedState, index, undefined, this.now());
+    }
     this.finishMove(index);
     if (acceptedState.winner || acceptedState.draw) {
       this.aiPending = false;
@@ -197,11 +211,14 @@ export class GameController {
   }
 
   startGame() {
+    this.cancelFloorIsLavaProgress();
     this.homePresentationEnabled = false;
     this.stopMatchmaking();
     this.view.closeResultDialog();
     this.view.resetFeedback();
     this.gameStarted = true;
+    this.eventMatch = null;
+    this.eventRoundStats = null;
     this.opponent = COMPUTER_OPPONENT;
     this.matchScore = createMatchScore();
     this.resultRecorded = false;
@@ -219,17 +236,24 @@ export class GameController {
     this.view.resetFeedback();
     this.resultRecorded = false;
     this.roundId += 1;
-    this.player = startPlayerGame(this.player, undefined, this.now());
+    if (this.eventMatch) {
+      this.eventRoundStats.games += 1;
+    } else {
+      this.player = startPlayerGame(this.player, undefined, this.now());
+    }
     this.model.reset();
     this.view.focusFirstCell();
   }
 
   showHome(options = {}) {
     this.cancelComputerMove();
+    this.stopFloorIsLavaLifecycle();
     this.view.stopLeaderboard?.();
     this.stopMatchmaking();
     this.view.resetFeedback();
     this.opponent = null;
+    this.eventMatch = null;
+    this.eventRoundStats = null;
     this.view.closeResultDialog();
     this.gameStarted = false;
     this.roundId += 1;
@@ -277,8 +301,21 @@ export class GameController {
     if (animation?.then) animation.then(finish); else finish();
   }
 
+  presentFloorIsLavaProgress() {
+    const event = getFloorIsLavaAttempt(this.player, this.now());
+    if (this.homeProgressQueued || !event.pending_progress || getFloorIsLavaStatus(event, this.now()).phase !== "open" || event.status !== "active") return;
+    const result = consumeFloorIsLavaProgress(this.player, event, undefined, this.now());
+    this.player = result.player;
+    if (!result.consumed) return;
+    this.homeProgressQueued = true;
+    const complete = () => { this.homeProgressQueued = false; this.enterHomePresentation(); };
+    if (this.view.presentFloorIsLavaProgress) this.view.presentFloorIsLavaProgress(complete);
+    else complete();
+  }
+
   enterHomePresentation() {
     if (!this.homePresentationEnabled) return;
+    if (!this.coinPresentationActive && !this.homeProgressQueued) { this.presentFloorIsLavaProgress(); if (this.homeProgressQueued) return; }
     this.reconcileCoinPresentationQueue();
     if (!this.coinPresentationActive) {
       const next = this.coinPresentationQueue.shift();
@@ -345,15 +382,23 @@ export class GameController {
       this.view.renderDailyGift?.(latest.daily_gift);
       if (!this.coinPresentationActive) this.view.renderCoinBalance?.(latest.coin_balance);
       if (latest.daily_gift.claimed && this.view.dailyGiftMode === "claimable") this.view.closeDailyGift?.();
+      if (this.view.floorIsLavaOpen) this.renderFloorIsLava();
     });
   }
 
+  cancelFloorIsLavaProgress() {
+    this.view.finishFloorIsLavaProgress?.();
+    this.homeProgressQueued = false;
+  }
+
   showLeaderboard() {
+    this.cancelFloorIsLavaProgress();
     this.player = this.refreshLeaderboardPlayer();
     this.view.showLeaderboard(this.player, this.now());
   }
 
   showBattlePass() {
+    this.cancelFloorIsLavaProgress();
     this.view.finishCoinPresentation?.();
     const timestamp = this.now();
     if (this.player.battle_pass_cycle !== getBattlePassCycle(timestamp).key) {
@@ -404,6 +449,7 @@ export class GameController {
   }
 
   showProfile() {
+    this.cancelFloorIsLavaProgress();
     this.view.finishCoinPresentation?.();
     if (!this.coinPresentationActive && this.player.pending_coins > 0) {
       this.enterHomePresentation();
@@ -462,39 +508,117 @@ export class GameController {
 
   recordResult(state) {
     if (this.resultRecorded || (!state.winner && !state.draw)) return;
-
-    const matchWinner = state.winner
-      && this.matchScore[state.winner] + 1 >= MATCH_POINTS_TO_WIN;
+    if (this.eventMatch) {
+      this.recordFloorIsLavaRound(state);
+      return;
+    }
+    const matchWinner = state.winner && this.matchScore[state.winner] + 1 >= MATCH_POINTS_TO_WIN;
     this.player = updatePlayerAfterResult(this.player, state, undefined, this.now());
     if (state.winner) {
-      const decisiveLocalWin = state.winner === "X"
-        && this.matchScore.X === MATCH_POINTS_TO_WIN - 1;
-      this.matchScore = {
-        ...this.matchScore,
-        [state.winner]: this.matchScore[state.winner] + 1
-      };
-      if (decisiveLocalWin) {
-        this.player = awardLeaderboardPoint(this.player, this.now());
-      }
+      const decisiveLocalWin = state.winner === "X" && this.matchScore.X === MATCH_POINTS_TO_WIN - 1;
+      this.matchScore = { ...this.matchScore, [state.winner]: this.matchScore[state.winner] + 1 };
+      if (decisiveLocalWin) this.player = awardLeaderboardPoint(this.player, this.now());
     }
     if (matchWinner) {
       this.player = updatePlayerAfterMatch(this.player, state.winner, undefined, this.now());
       if (state.winner === "X") {
         const pointsBefore = this.player.battle_pass_points;
         this.player = awardPlayerBattlePassPoint(this.player, this.now());
-        if (this.player.battle_pass_points > pointsBefore) {
-          this.pendingBattlePassVfx = this.player.battle_pass_points;
-        }
-        this.player = awardCoins(
-          this.player,
-          this.player.win_streak === 3 ? 4 : 3,
-          undefined,
-          this.now()
-        );
+        if (this.player.battle_pass_points > pointsBefore) this.pendingBattlePassVfx = this.player.battle_pass_points;
+        this.player = awardCoins(this.player, this.player.win_streak === 3 ? 4 : 3, undefined, this.now());
       }
     }
     this.resultRecorded = true;
     this.render();
+  }
+
+  recordFloorIsLavaRound(state) {
+    const stats = this.eventRoundStats;
+    if (!stats) return;
+    if (state.draw) stats.draws += 1;
+    if (state.winner === "X") stats.wins += 1;
+    if (state.winner === "O") stats.losses += 1;
+    if (state.winner) this.matchScore = { ...this.matchScore, [state.winner]: this.matchScore[state.winner] + 1 };
+    const matchWinner = state.winner && this.matchScore[state.winner] >= MATCH_POINTS_TO_WIN;
+    this.resultRecorded = true;
+    if (!matchWinner) { this.render(); return; }
+    const result = commitFloorIsLavaResult(this.player, this.eventMatch, state.winner === "X" ? "win" : "loss", undefined, this.now(), stats);
+    this.player = result.player;
+    if (!result.accepted) {
+      // Another tab won the race: abandon every buffered result and reconcile.
+      this.eventMatch = null;
+      this.eventRoundStats = null;
+      this.gameStarted = false;
+      this.roundId += 1;
+      this.model.reset();
+      this.showFloorIsLava();
+      return;
+    }
+    this.render();
+  }
+
+  showFloorIsLava() {
+    this.cancelComputerMove();
+    this.stopMatchmaking();
+    this.view.closeResultDialog?.();
+    this.player = reloadPlayer(undefined, this.now());
+    this.eventMatch = null;
+    this.eventRoundStats = null;
+    this.gameStarted = false;
+    this.roundId += 1;
+    this.model.reset();
+    this.renderFloorIsLava();
+    this.view.showFloorIsLava?.();
+    this.startFloorIsLavaLifecycle();
+  }
+
+  renderFloorIsLava() {
+    const now = this.now();
+    this.player = reloadPlayer(undefined, now);
+    const attempt = getFloorIsLavaAttempt(this.player, now);
+    this.view.renderFloorIsLava?.(attempt, createFloorIsLavaField(attempt.date), now);
+  }
+
+  startFloorIsLavaLifecycle() {
+    this.stopFloorIsLavaLifecycle();
+    this.floorIsLavaRefreshTimer = this.timer.setInterval?.(() => {
+      if (this.view.floorIsLavaOpen) this.renderFloorIsLava();
+    }, 30_000) ?? null;
+  }
+
+  stopFloorIsLavaLifecycle() {
+    if (this.floorIsLavaRefreshTimer !== null) this.timer.clearInterval?.(this.floorIsLavaRefreshTimer);
+    this.floorIsLavaRefreshTimer = null;
+  }
+
+  startFloorIsLavaMatch() {
+    this.cancelFloorIsLavaProgress();
+    const now = this.now();
+    this.player = reloadPlayer(undefined, now);
+    const event = getFloorIsLavaAttempt(this.player, now);
+    const state = getFloorIsLavaStatus(event, now);
+    if (!state.canStart || state.status !== "active" || event.wins >= MATCH_POINTS_TO_WIN + 3) {
+      this.renderFloorIsLava();
+      return false;
+    }
+    const field = createFloorIsLavaField(event.date);
+    const opponent = field.opponents[event.wins];
+    if (!opponent) return false;
+    this.stopFloorIsLavaLifecycle();
+    this.homePresentationEnabled = false;
+    this.view.finishCoinPresentation?.();
+    this.eventMatch = { date: event.date, revision: event.revision, stage: event.wins + 1, started_at: now };
+    this.eventRoundStats = { games: 1, wins: 0, draws: 0, losses: 0, moves: 0, last_move: null };
+    this.opponent = { opponent_id: opponent.id, opponent_name: opponent.name, opponent_role: "Daily lava climber", portrait: opponent.portrait };
+    this.matchScore = createMatchScore();
+    this.resultRecorded = false;
+    this.roundId += 1;
+    this.gameStarted = true;
+    this.model.reset();
+    this.view.showGame?.();
+    this.view.focusFirstCell?.();
+    this.render();
+    return true;
   }
 
   isCurrentRound(roundId) {

@@ -11,7 +11,16 @@ const htmlPath = path.join(root, "public/index.html");
 const mainPath = path.join(root, "public/js/main.js");
 
 class AppWorld {
-  async openGame(player = null) {
+  async openGame(player = null, fixedTimestamp = null) {
+    this.nativeDate = globalThis.Date;
+    if (fixedTimestamp !== null) {
+      const NativeDate = this.nativeDate;
+      class FixedDate extends NativeDate {
+        constructor(...args) { super(...(args.length ? args : [fixedTimestamp])); }
+        static now() { return fixedTimestamp; }
+      }
+      globalThis.Date = FixedDate;
+    }
     const html = await fs.readFile(htmlPath, "utf8");
     this.dom = new JSDOM(html, { url: "http://localhost/" });
     if (typeof player === "number" && player > 0) {
@@ -70,12 +79,18 @@ After(function () {
   this.dom.window.close();
   globalThis.setTimeout = this.nativeSetTimeout;
   Math.random = this.nativeRandom;
+  globalThis.Date = this.nativeDate;
   delete globalThis.window;
   delete globalThis.document;
 });
 
 Given("I open the tic-tac-toe game", async function () {
   await this.openGame();
+  assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
+});
+
+Given("I open the tic-tac-toe game during Floor Is Lava hours", async function () {
+  await this.openGame(null, new Date("2030-06-15T08:00:00").getTime());
   assert.equal(this.dom.window.document.title, "Tic-Tac-Toe");
 });
 
@@ -742,4 +757,55 @@ Then("no coin celebration is active", function () {
     0,
     "Flying coins should be deferred away from home"
   );
+});
+
+
+When("I open Floor Is Lava", function () {
+  const launcher = this.dom.window.document.querySelector("#open-floor-is-lava");
+  assert.ok(launcher, "The Floor Is Lava launcher does not exist");
+  launcher.click();
+});
+
+When("I start the Floor Is Lava match", function () {
+  const start = this.dom.window.document.querySelector("#start-floor-is-lava");
+  assert.ok(start && !start.hidden && !start.disabled, "The Floor Is Lava start is unavailable");
+  start.click();
+});
+
+When("I return from Floor Is Lava", function () {
+  const back = this.dom.window.document.querySelector("#floor-is-lava-back");
+  assert.ok(back, "The Floor Is Lava back button does not exist");
+  back.click();
+});
+
+Then("the Floor Is Lava screen is visible", function () {
+  assert.equal(this.dom.window.document.querySelector("#floor-is-lava-screen").hidden, false);
+  assert.equal(this.dom.window.document.activeElement.id, "floor-is-lava-title");
+});
+
+Then("the Floor Is Lava climb shows twelve daily climbers and me", function () {
+  const climbers = [...this.dom.window.document.querySelectorAll("#floor-is-lava-climb [data-lava-id]")];
+  assert.equal(climbers.length, 13);
+  assert.equal(climbers.filter((climber) => climber.dataset.lavaId !== "you").length, 12);
+  assert.ok(climbers.some((climber) => climber.getAttribute("aria-label") === "You, island 0"));
+});
+
+Then("the Floor Is Lava start is available for stage {int}", function (stage) {
+  const start = this.dom.window.document.querySelector("#start-floor-is-lava");
+  assert.equal(start.hidden, false);
+  assert.equal(start.disabled, false);
+  assert.match(start.textContent, new RegExp(`stage ${stage}$`));
+});
+
+Then("the opponent card shows the daily lava climber portrait", function () {
+  const documentRef = this.dom.window.document;
+  assert.match(documentRef.querySelector("#opponent-name").textContent, /.+/);
+  assert.ok(documentRef.querySelector("[data-event-opponent-portrait] svg"));
+});
+
+Then("the Floor Is Lava attempt has {int} win and active status", function (wins) {
+  const player = JSON.parse(this.dom.window.localStorage.getItem("tic-tac-toe-player"));
+  assert.deepEqual(player.floor_is_lava, {
+    date: "2030-06-15", status: "active", wins, revision: wins, pending_progress: true, payout: 0
+  });
 });

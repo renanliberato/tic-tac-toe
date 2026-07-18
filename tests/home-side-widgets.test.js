@@ -18,7 +18,7 @@ describe("home side widget lists", () => {
     const right = home.querySelector(":scope > .home-widget-list--right");
 
     expect([...utility.children].map((element) => element.id)).toEqual(["coin-holder", "open-profile"]);
-    expect([...left.children].map((element) => element.id)).toEqual(["daily-gifts-launcher"]);
+    expect([...left.children].map((element) => element.id)).toEqual(["daily-gifts-launcher", "open-floor-is-lava"]);
     expect([...right.children].map((element) => element.id)).toEqual([
       "open-leaderboard",
       "open-battle-pass"

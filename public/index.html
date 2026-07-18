@@ -31,6 +31,9 @@
                         <path d="M8 24h48M20 7v11M44 7v11M18 33h8v7h-8zm20 0h8v7h-8zM18 44h8v7h-8z" />
                     </svg>
                 </button>
+                <button id="open-floor-is-lava" class="floor-is-lava-launcher" type="button" aria-label="Open Floor Is Lava daily event">
+                    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><path d="M7 48c8-15 16-8 24-18 7-9 16-3 26-17v39H7Z"/><path d="M12 55h43" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="43" cy="17" r="5"/></svg>
+                </button>
             </div>
             <p id="coin-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
             <div class="home-preview" aria-hidden="true">
@@ -69,6 +72,18 @@
                     </span>
                 </div>
             </div>
+        </section>
+
+        <section id="floor-is-lava-screen" class="screen floor-is-lava-screen" aria-labelledby="floor-is-lava-title" hidden>
+            <header class="screen-header floor-is-lava-header">
+                <button id="floor-is-lava-back" class="back-button" type="button" aria-label="Back to home">Back</button>
+                <h2 id="floor-is-lava-title" tabindex="-1">Floor Is Lava</h2>
+            </header>
+            <p id="floor-is-lava-live" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+            <section class="floor-is-lava-summit" aria-label="100 coin reward island"><span aria-hidden="true">🏝</span><strong>¢ 100 pot</strong><small id="floor-is-lava-winners"></small></section>
+            <p id="floor-is-lava-status" class="floor-is-lava-status"></p>
+            <div id="floor-is-lava-climb" class="floor-is-lava-climb" aria-label="Daily island climb"></div>
+            <button id="start-floor-is-lava" class="floor-is-lava-start" type="button"></button>
         </section>
 
         <section id="leaderboard-screen" class="screen leaderboard-screen" aria-labelledby="leaderboard-title" hidden>

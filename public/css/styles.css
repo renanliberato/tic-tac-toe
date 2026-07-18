@@ -1398,3 +1398,32 @@ body {
   .game .battle-pass-milestone:hover:not(:disabled),
   .game .battle-pass-milestone:focus-visible { transform: none; }
 }
+
+/* Floor Is Lava daily event — all decorative motion stays inside the game. */
+.game .floor-is-lava-launcher { color: #d84b24; background: #ffd65a; position: relative; overflow: visible; }
+.game .floor-is-lava-launcher svg { fill: currentColor; stroke: currentColor; }
+.game .floor-is-lava-plus-one { position: absolute; top: -24px; right: -27px; z-index: 4; color: #22863a; font-size: 30px; font-weight: 900; text-shadow: 1px 1px #fff; animation: floor-is-lava-plus 750ms ease-out both; }
+.game .floor-is-lava-launcher--progress { animation: floor-is-lava-pop 500ms cubic-bezier(.2, .9, .3, 1.35); }
+.game .floor-is-lava-screen { box-sizing: border-box; height: 100%; min-height: 520px; overflow: hidden; padding: 28px 10px 24px; background: linear-gradient(#77d8f1 0%, #e9f9ff 62%, #ffad4c 100%); }
+.game .floor-is-lava-screen[hidden] { display: none; }
+.game .floor-is-lava-header { min-height: 64px; margin-bottom: 4px; }
+.game .floor-is-lava-header h2 { font-size: clamp(34px, 5vw, 55px); text-shadow: 2px 3px rgb(255 255 255 / .75); }
+.game .floor-is-lava-header .back-button { min-width: 106px; min-height: 48px; font-size: 20px; }
+.game .floor-is-lava-summit { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 54px; color: #6a3e00; font-size: 22px; font-weight: 800; }
+.game .floor-is-lava-summit > span { font-size: 43px; line-height: 1; }
+.game .floor-is-lava-summit small { font-size: 13px; font-weight: 700; }
+.game .floor-is-lava-status { min-height: 28px; margin: 0; color: #4a260c; font-size: 18px; font-weight: 750; text-align: center; }
+.game .floor-is-lava-climb { position: relative; height: 292px; margin: 2px auto 8px; overflow: hidden; border: 3px solid #a14b21; border-radius: 22px 22px 12px 12px; background: linear-gradient(to top, #ff6b2d 0 16%, #ff9f3f 16% 31%, #f7d36b 31% 100%); box-shadow: inset 0 8px rgb(255 255 255 / .28); }
+.game .floor-is-lava-climb::before { position: absolute; inset: 14px 14% 12px; content: ""; opacity: .72; background: repeating-linear-gradient(to top, transparent 0 40px, #6f9c46 40px 47px, transparent 47px 48px); border-radius: 45% 45% 10px 10px; }
+.game .floor-is-lava-climber { position: absolute; z-index: 1; bottom: calc(9px + var(--lava-level) * 43px); left: calc(5% + var(--lava-lane) * 24%); display: grid; width: 63px; justify-items: center; color: #302514; font-size: 9px; font-weight: 800; line-height: 1.1; text-align: center; transition: bottom .45s cubic-bezier(.3,.8,.3,1.3); }
+.game .floor-is-lava-climber svg, .game .floor-is-lava-you-portrait { width: 32px; height: 32px; padding: 2px; border: 2px solid #fff; border-radius: 50%; background: #fff8; box-shadow: 0 2px 0 #7b3719; }
+.game .floor-is-lava-climber--finisher svg { outline: 2px solid #f4bd24; }
+.game .floor-is-lava-climber--you { z-index: 2; color: #073b61; font-size: 11px; transform: scale(1.18); }
+.game .floor-is-lava-you-portrait { display: grid; box-sizing: border-box; place-items: center; color: #fff; background: #1277bd; font-size: 20px; }
+.game .floor-is-lava-start { display: block; min-width: min(95%, 440px); min-height: 54px; margin: 0 auto; font-size: 19px; font-weight: 800; }
+@keyframes floor-is-lava-pop { 45% { transform: translateY(-9px) scale(1.12); } }
+@keyframes floor-is-lava-plus { from { opacity: 0; transform: translateY(7px) scale(.5); } 45% { opacity: 1; } to { opacity: 0; transform: translateY(-30px) scale(1.1); } }
+@media (max-width: 560px) { .game .floor-is-lava-screen { min-height: 470px; padding: 14px 3px; } .game .floor-is-lava-climb { height: 252px; } .game .floor-is-lava-climber { bottom: calc(6px + var(--lava-level) * 37px); left: calc(3% + var(--lava-lane) * 24%); } }
+@media (prefers-reduced-motion: reduce) { .game .floor-is-lava-launcher--progress, .game .floor-is-lava-plus-one { animation: none; } .game .floor-is-lava-climber { transition: none; } }
+.game .event-opponent-portrait { display: inline-grid; width: 44px; height: 44px; margin-right: 9px; vertical-align: middle; place-items: center; }
+.game .event-opponent-portrait svg { width: 100%; height: 100%; }

@@ -2,6 +2,7 @@ import { createOpponent, createUuid, getNameForId } from "./identity.js";
 import { getCycle } from "./leaderboard.js";
 import { normalizeBattlePass, awardBattlePassPoint, claimBattlePassMilestone } from "./battle-pass.js";
 import { DEFAULT_STYLE_ID, getBoardStyle, isBoardStyleId } from "./board-styles.js";
+import { FLOOR_IS_LAVA_STAGES, getFloorIsLavaPayout, getFloorIsLavaStatus } from "./floor-is-lava.js";
 
 export const PLAYER_STORAGE_KEY = "tic-tac-toe-player";
 export const DAILY_GIFT_REWARDS = Object.freeze([10, 10, 10, 10, 10, 10, 100]);
@@ -32,6 +33,28 @@ export function getLocalDate(now = new Date()) {
 
 function freshGift(date) {
   return { day: 1, claimed: false, eligible_date: date, revision: 0 };
+}
+
+export function freshFloorIsLavaEvent(date = getLocalDate()) {
+  return { date: getLocalDate(date), status: "active", wins: 0, revision: 0, pending_progress: false, payout: 0 };
+}
+
+function normalizeFloorIsLavaEvent(value, timestamp) {
+  const date = getLocalDate(timestamp);
+  if (!value || typeof value !== "object" || !isLocalDate(value.date) || value.date !== date) return freshFloorIsLavaEvent(date);
+  const wins = Number.isInteger(value.wins) && value.wins >= 0 && value.wins <= FLOOR_IS_LAVA_STAGES ? value.wins : 0;
+  const revision = Number.isInteger(value.revision) && value.revision >= 0 ? value.revision : 0;
+  let status = ["active", "eliminated", "completed", "closed"].includes(value.status) ? value.status : "active";
+  // A malformed completed record must not become a claimable reward.
+  if (status === "completed" && wins !== FLOOR_IS_LAVA_STAGES) status = "eliminated";
+  if (status === "active" && wins === FLOOR_IS_LAVA_STAGES) status = "completed";
+  const evaluated = getFloorIsLavaStatus({ date, status, wins }, timestamp);
+  return {
+    date, status: evaluated.status, wins, revision,
+    pending_progress: status === "active" && wins > 0 && wins < FLOOR_IS_LAVA_STAGES && value.pending_progress === true,
+    payout: status === "completed" && Number.isInteger(value.payout) && value.payout === getFloorIsLavaPayout(date)
+      ? value.payout : 0
+  };
 }
 
 function validGift(gift) {
@@ -130,6 +153,7 @@ export function normalizePlayer(value, timestamp = Date.now()) {
     leaderboard_score: cycleMatches ? asCount(value.leaderboard_score) : 0,
     owned_styles: normalizeOwnedStyles(value.owned_styles),
     daily_gift: validGift(value.daily_gift) ? { ...value.daily_gift } : freshGift(getLocalDate(timestamp)),
+    floor_is_lava: normalizeFloorIsLavaEvent(value.floor_is_lava, timestamp),
     equipped_style: isBoardStyleId(value.equipped_style)
       && normalizeOwnedStyles(value.owned_styles).includes(value.equipped_style)
       ? value.equipped_style : DEFAULT_STYLE_ID,
@@ -169,11 +193,12 @@ export function savePlayer(player, storage, timestamp = Date.now()) {
 /** Read an external update without treating it as a new startup. */
 export function readLatestPlayer(storage, now = new Date()) {
   const resolvedStorage = getStorage(storage);
-  const date = getLocalDate(now);
-  const stored = readPlayer(resolvedStorage, date);
-  if (!stored) return memoryPlayer ? normalizePlayer(memoryPlayer, date) : null;
+  const timestamp = now instanceof Date || typeof now === "number" ? now : getLocalDate(now);
+  const stored = readPlayer(resolvedStorage, timestamp);
+  if (!stored) return memoryPlayer ? normalizePlayer(memoryPlayer, timestamp) : null;
   if (failedStorages.has(resolvedStorage) && memoryPlayer?.player_id === stored.player_id
-      && memoryPlayer.daily_gift.revision >= stored.daily_gift.revision) return memoryPlayer;
+      && memoryPlayer.daily_gift.revision >= stored.daily_gift.revision
+      && memoryPlayer.floor_is_lava.revision >= stored.floor_is_lava.revision) return memoryPlayer;
   memoryPlayer = stored;
   return stored;
 }
@@ -365,3 +390,80 @@ export function activatePlayerStyle(player, styleId, storage) {
 }
 
 export const purchaseOrEquipStyle = activatePlayerStyle;
+
+
+/** Return a reconciled daily event record, persisting a date reset/close transition. */
+export function evaluateFloorIsLava(player, now = new Date()) {
+  return normalizePlayer(player, now);
+}
+
+export function getFloorIsLavaAttempt(player, now = new Date()) {
+  return evaluateFloorIsLava(player, now).floor_is_lava;
+}
+
+/** Consume the one-shot Home +1 marker only when this exact active attempt still owns it. */
+export function consumeFloorIsLavaProgress(player, expected, storage, now = new Date()) {
+  const latest = readLatestPlayer(storage, now) || normalizePlayer(player, now);
+  const event = latest.floor_is_lava;
+  if (!expected || event.date !== expected.date || event.revision !== expected.revision
+      || event.status !== "active" || !event.pending_progress || getFloorIsLavaStatus(event, now).phase !== "open") {
+    return { player: latest, consumed: false };
+  }
+  const updated = savePlayer({ ...latest, floor_is_lava: { ...event, pending_progress: false, revision: event.revision + 1 } }, storage, now);
+  return { player: updated, consumed: true };
+}
+
+/**
+ * Compare-and-commit one completed event match. `expected` is captured before
+ * starting the board; stale tabs get accepted:false and no ordinary rewards.
+ */
+export function commitFloorIsLavaResult(player, expected, outcome, storage, now = new Date(), normal = {}) {
+  const latest = readLatestPlayer(storage, now) || normalizePlayer(player, now);
+  const event = latest.floor_is_lava;
+  const status = getFloorIsLavaStatus(event, now);
+  const startedBeforeClose = expected?.started_at == null || Number(expected.started_at) < status.end;
+  const valid = expected && latest.player_id === player?.player_id && event.date === expected.date
+    && event.revision === expected.revision && event.wins + 1 === expected.stage
+    && ["active", "closed"].includes(event.status) && startedBeforeClose
+    && (event.status === "active" || status.phase === "closed");
+  if (!valid || !["win", "loss", "draw"].includes(outcome)) return { player: latest, accepted: false, payout: 0 };
+  if (outcome === "draw") return { player: latest, accepted: true, payout: 0, status: event.status };
+
+  const won = outcome === "win";
+  const wins = won ? event.wins + 1 : event.wins;
+  const completed = won && wins === FLOOR_IS_LAVA_STAGES;
+  const payout = completed ? getFloorIsLavaPayout(event.date) : 0;
+  const nextEvent = {
+    ...event, wins, revision: event.revision + 1,
+    status: completed ? "completed" : won ? (status.phase === "closed" ? "closed" : "active") : "eliminated",
+    pending_progress: won && !completed && status.phase === "open",
+    payout: completed ? payout : event.payout
+  };
+  const rounds = Math.max(0, Number.isInteger(normal.rounds) ? normal.rounds : 0);
+  const localRoundWins = Math.max(0, Number.isInteger(normal.wins) ? normal.wins : 0);
+  const draws = Math.max(0, Number.isInteger(normal.draws) ? normal.draws : 0);
+  const losses = Math.max(0, Number.isInteger(normal.losses) ? normal.losses : 0);
+  const moves = Math.max(0, Number.isInteger(normal.moves) ? normal.moves : 0);
+  const normalMatchWin = won;
+  const nextStreak = normalMatchWin ? Math.min(asWinStreak(latest.win_streak) + 1, 3) : 0;
+  const ordinaryCoins = normalMatchWin ? (nextStreak === 3 ? 4 : 3) : 0;
+  const battle = normalMatchWin ? awardBattlePassPoint(latest, now) : latest;
+  const updated = savePlayer({
+    ...battle,
+    games_played: asCount(latest.games_played) + rounds,
+    moves_played: asCount(latest.moves_played) + moves,
+    last_move: normal.last_move && Number.isInteger(normal.last_move.cell) ? normal.last_move : latest.last_move,
+    wins: asCount(latest.wins) + localRoundWins,
+    draws: asCount(latest.draws) + draws,
+    losses: asCount(latest.losses) + losses,
+    win_streak: nextStreak,
+    leaderboard_score: normalMatchWin ? asCount(latest.leaderboard_score) + 1 : latest.leaderboard_score,
+    coin_balance: asCount(latest.coin_balance) + ordinaryCoins + payout,
+    pending_coins: asCount(latest.pending_coins) + ordinaryCoins + payout,
+    floor_is_lava: nextEvent
+  }, storage, now);
+  return { player: updated, accepted: true, payout, status: nextEvent.status, ordinaryCoins };
+}
+
+export const commitDailyLavaResult = commitFloorIsLavaResult;
+export const getDailyLavaAttempt = getFloorIsLavaAttempt;

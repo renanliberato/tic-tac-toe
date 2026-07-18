@@ -3,6 +3,7 @@ import { createStandings, getCycle } from "./leaderboard.js";
 import { PLAYER_STORAGE_KEY } from "./player.js";
 import { BATTLE_PASS_MILESTONES, getBattlePassCycle } from "./battle-pass.js";
 import { BOARD_STYLES, getBoardStyle, styleTokens } from "./board-styles.js";
+import { FLOOR_IS_LAVA_STAGES, getFloorIsLavaPositions, getFloorIsLavaStatus } from "./floor-is-lava.js";
 
 const WINNING_LINE_DURATION = 700;
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -89,6 +90,17 @@ export class GameView {
     this.coinPresentation = null;
     this.coinPresentationId = 0;
     this.dailyGiftLauncher = documentRef.querySelector("#daily-gifts-launcher");
+    this.floorIsLavaLauncher = documentRef.querySelector("#open-floor-is-lava");
+    this.floorIsLavaScreen = documentRef.querySelector("#floor-is-lava-screen");
+    this.floorIsLavaBack = documentRef.querySelector("#floor-is-lava-back");
+    this.floorIsLavaStart = documentRef.querySelector("#start-floor-is-lava");
+    this.floorIsLavaStatus = documentRef.querySelector("#floor-is-lava-status");
+    this.floorIsLavaClimb = documentRef.querySelector("#floor-is-lava-climb");
+    this.floorIsLavaWinners = documentRef.querySelector("#floor-is-lava-winners");
+    this.floorIsLavaLive = documentRef.querySelector("#floor-is-lava-live");
+    this.floorIsLavaHeading = documentRef.querySelector("#floor-is-lava-title");
+    this.floorIsLavaOpen = false;
+    this.floorIsLavaPresentation = null;
     this.dailyGiftDialog = documentRef.querySelector("#daily-gifts-dialog");
     this.dailyGiftGrid = documentRef.querySelector("#daily-gifts-grid");
     this.dailyGiftDescription = documentRef.querySelector("#daily-gifts-description");
@@ -124,6 +136,7 @@ export class GameView {
     this.handleLeaderboardScroll = () => this.updateFloatingLocalRow();
     this.handleVisibilityChange = () => {
       if (this.document.visibilityState === "visible") this.refreshLeaderboard();
+      else this.finishFloorIsLavaProgress();
     };
     this.handleStorageChange = (event) => {
       if (event.key === PLAYER_STORAGE_KEY) this.refreshLeaderboard(true);
@@ -159,6 +172,10 @@ export class GameView {
   onDailyGiftOpen(handler) {
     this.dailyGiftLauncher?.addEventListener("click", handler);
   }
+
+  onFloorIsLavaOpen(handler) { this.floorIsLavaLauncher?.addEventListener("click", handler); }
+  onFloorIsLavaBack(handler) { this.floorIsLavaBack?.addEventListener("click", handler); }
+  onFloorIsLavaStart(handler) { this.floorIsLavaStart?.addEventListener("click", handler); }
 
   onProfile(handler) { this.profileButton?.addEventListener("click", handler); }
   onProfileBack(handler) { this.profileBack?.addEventListener("click", handler); }
@@ -541,6 +558,19 @@ export class GameView {
       this.opponentPanel.hidden = !opponent;
       this.opponentPanel.dataset.playerId = opponent?.opponent_id || "";
       this.opponentPanel.dataset.opponentId = opponent?.opponent_id || "";
+      let portrait = this.opponentPanel.querySelector("[data-event-opponent-portrait]");
+      if (opponent?.portrait) {
+        if (!portrait) {
+          portrait = this.document.createElement("span");
+          portrait.className = "event-opponent-portrait";
+          portrait.dataset.eventOpponentPortrait = "";
+          portrait.setAttribute("aria-hidden", "true");
+          this.opponentPanel.prepend(portrait);
+        }
+        portrait.innerHTML = opponent.portrait;
+      } else {
+        portrait?.remove();
+      }
     }
 
     const turnIsActive = gameStarted && !state?.winner && !state?.draw;
@@ -833,14 +863,104 @@ export class GameView {
     this.updateFloatingLocalRow();
   }
 
+  renderFloorIsLava(event = {}, field = { opponents: [], finisherCount: 0 }, now = this.now()) {
+    if (!this.floorIsLavaScreen) return;
+    const status = getFloorIsLavaStatus(event, now);
+    const positions = getFloorIsLavaPositions(event.date || status.date, now);
+    const stage = Math.min(FLOOR_IS_LAVA_STAGES, (event.wins || 0) + 1);
+    const messages = {
+      before: "The islands open at 6:00 AM. Come back soon!",
+      closed: event.status === "active" || event.status === "closed" ? `Closed for today — you reached island ${event.wins || 0}. Return tomorrow!` : "The climb is closed for today.",
+      eliminated: "The lava got you this time. Come back tomorrow!",
+      completed: `Summit reached! You earned ¢ ${event.payout || 0} from the shared pot.`,
+      active: `Stage ${stage} of ${FLOOR_IS_LAVA_STAGES}: climb to the reward island.`
+    };
+    const message = status.status === "eliminated" ? messages.eliminated
+      : status.status === "completed" ? messages.completed
+        : status.phase === "before" ? messages.before
+          : status.phase === "closed" ? messages.closed : messages.active;
+    if (this.floorIsLavaStatus) this.floorIsLavaStatus.textContent = message;
+    if (this.floorIsLavaLive) this.floorIsLavaLive.textContent = message;
+    if (this.floorIsLavaWinners) this.floorIsLavaWinners.textContent = `${field.finisherCount || 0} climbers are sharing the summit`;
+    if (this.floorIsLavaStart) {
+      const canStart = status.canStart && status.status === "active" && (event.wins || 0) < FLOOR_IS_LAVA_STAGES;
+      this.floorIsLavaStart.hidden = !canStart;
+      this.floorIsLavaStart.disabled = !canStart;
+      const opponent = field.opponents?.[event.wins || 0];
+      this.floorIsLavaStart.textContent = opponent ? `Play ${opponent.name} · stage ${stage}` : "Climb complete";
+    }
+    if (!this.floorIsLavaClimb) return;
+    const existing = new Map([...this.floorIsLavaClimb.querySelectorAll("[data-lava-id]")].map((node) => [node.dataset.lavaId, node]));
+    const nodes = positions.map((opponent, index) => {
+      let node = existing.get(opponent.id);
+      if (!node) {
+        node = this.document.createElement("div");
+        node.className = "floor-is-lava-climber";
+        node.dataset.lavaId = opponent.id;
+        node.setAttribute("role", "img");
+        node.innerHTML = `${opponent.portrait}<span></span>`;
+      }
+      node.style.setProperty("--lava-level", String(opponent.level));
+      node.style.setProperty("--lava-lane", String(index % 4));
+      node.classList.toggle("floor-is-lava-climber--finisher", opponent.finisher);
+      node.querySelector("span").textContent = opponent.name;
+      node.setAttribute("aria-label", `${opponent.name}, island ${opponent.level}${opponent.finisher ? ", summit climber" : ""}`);
+      return node;
+    });
+    const local = this.document.createElement("div");
+    local.className = "floor-is-lava-climber floor-is-lava-climber--you";
+    local.dataset.lavaId = "you";
+    local.style.setProperty("--lava-level", String(Math.min(FLOOR_IS_LAVA_STAGES, event.wins || 0)));
+    local.style.setProperty("--lava-lane", "2");
+    local.setAttribute("role", "img"); local.setAttribute("aria-label", `You, island ${event.wins || 0}`);
+    local.innerHTML = "<span class=\"floor-is-lava-you-portrait\" aria-hidden=\"true\">★</span><span>You</span>";
+    nodes.push(local);
+    this.floorIsLavaClimb.replaceChildren(...nodes);
+  }
+
+  showFloorIsLava() {
+    this.stopLeaderboard();
+    this.closeDailyGift({ restoreFocus: false });
+    this.hideScreens(this.floorIsLavaScreen);
+    this.floorIsLavaOpen = true;
+    this.floorIsLavaHeading?.focus();
+  }
+
+  presentFloorIsLavaProgress(done) {
+    this.finishFloorIsLavaProgress();
+    const launcher = this.floorIsLavaLauncher;
+    if (!launcher) { done?.(); return; }
+    const label = this.document.createElement("span");
+    label.className = "floor-is-lava-plus-one";
+    label.textContent = "+1";
+    label.setAttribute("aria-hidden", "true");
+    launcher.append(label);
+    launcher.classList.add("floor-is-lava-launcher--progress");
+    if (this.coinAnnouncement) this.coinAnnouncement.textContent = "Floor Is Lava: climbed one island";
+    const finish = () => { this.finishFloorIsLavaProgress(); done?.(); };
+    this.floorIsLavaPresentation = { label, timer: globalThis.setTimeout(finish, this.isReducedMotion() ? 0 : 750) };
+  }
+
+  finishFloorIsLavaProgress() {
+    const session = this.floorIsLavaPresentation;
+    if (!session) return;
+    globalThis.clearTimeout(session.timer);
+    session.label?.remove();
+    this.floorIsLavaLauncher?.classList.remove("floor-is-lava-launcher--progress");
+    this.floorIsLavaPresentation = null;
+  }
+
   showHome(options = {}) {
     this.stopLeaderboard();
-    [this.homeScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
+    [this.homeScreen, this.floorIsLavaScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
       .forEach((screen) => { if (screen) screen.hidden = screen !== this.homeScreen; });
+    this.floorIsLavaOpen = false;
+    this.finishFloorIsLavaProgress();
     if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = false;
     if (options.focusLeaderboard) this.leaderboardEntry?.focus();
     else if (options.focusBattlePass) this.battlePassEntry?.focus();
     else if (options.focusProfile) this.profileButton?.focus();
+    else if (options.focusFloorIsLava) this.floorIsLavaLauncher?.focus();
     else this.start?.focus();
   }
 
@@ -853,6 +973,8 @@ export class GameView {
   }
 
   showGame() {
+    this.floorIsLavaOpen = false;
+    this.finishFloorIsLavaProgress();
     this.stopLeaderboard();
     this.closeDailyGift({ restoreFocus: false });
     this.homeScreen.hidden = true;
@@ -893,7 +1015,7 @@ export class GameView {
   }
 
   hideScreens(active) {
-    [this.homeScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
+    [this.homeScreen, this.floorIsLavaScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
       .forEach((screen) => { if (screen) screen.hidden = screen !== active; });
   }
 

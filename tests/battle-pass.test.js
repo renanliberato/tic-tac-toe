@@ -119,10 +119,20 @@ describe("monthly battle pass rules", () => {
       expect(controller.player.battle_pass_points).toBe(1);
       expect(JSON.parse(storage.getItem(PLAYER_STORAGE_KEY)).battle_pass_points).toBe(1);
       expect(controller.pendingBattlePassVfx).toBe(1);
+      const eventMatch = { date: "2026-07-05", revision: 1, stage: 2, started_at: JULY_RESET };
+      const eventRoundStats = { games: 1, wins: 1, draws: 0, losses: 0, moves: 4 };
+      controller.eventMatch = eventMatch;
+      controller.eventRoundStats = eventRoundStats;
+      controller.floorIsLavaRefreshTimer = 7;
+      controller.homeProgressQueued = true;
 
       controller.showBattlePass();
       controller.showBattlePass();
       expect(triggeredMilestones).toEqual([1]);
+      expect(controller.eventMatch).toBe(eventMatch);
+      expect(controller.eventRoundStats).toBe(eventRoundStats);
+      expect(controller.floorIsLavaRefreshTimer).toBe(7);
+      expect(controller.homeProgressQueued).toBe(false);
     } finally {
       globalThis.localStorage = previousStorage;
     }
