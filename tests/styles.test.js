@@ -346,8 +346,52 @@ describe("game screen layout", () => {
   });
 });
 
+function battlePassAnimationFixture() {
+  return `<!doctype html>
+    <meta charset="utf-8">
+    <style>${styles}</style>
+    <main class="game">
+      <div class="battle-pass-list battle-pass-list--entering">
+        <button class="battle-pass-milestone battle-pass-milestone--vfx" type="button">First</button>
+        <button class="battle-pass-milestone battle-pass-milestone--vfx" type="button">Second</button>
+      </div>
+    </main>
+    <script>
+      const cards = [...document.querySelectorAll(".battle-pass-milestone")];
+      document.body.dataset.animations = JSON.stringify(cards.map((card) => {
+        const computed = getComputedStyle(card);
+        return {
+          names: computed.animationName.split(",").map((name) => name.trim()),
+          durations: computed.animationDuration.split(",").map((duration) => duration.trim()),
+          delays: computed.animationDelay.split(",").map((delay) => delay.trim())
+        };
+      }));
+    </script>`;
+}
+
+async function readBattlePassAnimationsInBrowser(executablePath) {
+  const directory = mkdtempSync(join(tmpdir(), "battle-pass-animation-"));
+  const fixturePath = join(directory, "fixture.html");
+  writeFileSync(fixturePath, battlePassAnimationFixture());
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-gpu", "--disable-background-networking"]
+    });
+    const page = await browser.newPage();
+    await page.goto(pathToFileURL(fixturePath).href, { waitUntil: "load", timeout: 15000 });
+    return JSON.parse(await page.evaluate(() => document.body.dataset.animations));
+  } finally {
+    await browser?.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 describe("battle-pass animation cascade", () => {
-  it("lets localized claim VFX override the initial entrance on the first cards", () => {
+  it("composes localized claim VFX with the initial entrance on the first cards", () => {
     const enteringRule = ".game .battle-pass-list--entering .battle-pass-milestone:nth-child(-n+8)";
     const vfxRule = ".game .battle-pass-list--entering .battle-pass-milestone.battle-pass-milestone--vfx:nth-child(-n+8)";
     const enteringRuleIndex = styles.indexOf(enteringRule);
@@ -356,8 +400,23 @@ describe("battle-pass animation cascade", () => {
 
     expect(enteringRuleIndex).toBeGreaterThanOrEqual(0);
     expect(vfxRuleIndex).toBeGreaterThan(enteringRuleIndex);
-    expect(vfxDeclaration).toMatch(/animation:\s*battle-pass-card-pulse\s+\.6s\s+ease-out\s+both/);
+    expect(vfxDeclaration).toMatch(/animation-name:\s*battle-pass-card-enter,\s*battle-pass-card-pulse/);
+    expect(vfxDeclaration).toMatch(/animation-duration:\s*\.42s,\s*\.6s/);
+    expect(vfxDeclaration).toMatch(/animation-timing-function:\s*ease-out,\s*ease-out/);
+    expect(vfxDeclaration).toMatch(/animation-fill-mode:\s*both,\s*both/);
+    expect(vfxDeclaration).not.toMatch(/animation:\s/);
   });
+
+  it("keeps both animations and the entrance stagger during a claim overlap in a browser", async () => {
+    const animations = await readBattlePassAnimationsInBrowser(browserPath());
+
+    expect(animations).toHaveLength(2);
+    for (const card of animations) {
+      expect(card.names).toEqual(["battle-pass-card-enter", "battle-pass-card-pulse"]);
+      expect(card.durations).toEqual(["0.42s", "0.6s"]);
+    }
+    expect(animations.map((card) => card.delays[0])).toEqual(["0s", "0.035s"]);
+  }, 30000);
 
   it("keeps the first-card VFX override disabled for reduced motion", () => {
     expect(styles).toMatch(/\.game \.battle-pass-list--entering \.battle-pass-milestone\.battle-pass-milestone--vfx:nth-child\(-n\+8\),\s*\n\s*\.game \.battle-pass-particle \{ animation: none; \}/);

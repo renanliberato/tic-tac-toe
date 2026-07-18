@@ -1367,7 +1367,7 @@ body {
 .game .battle-pass-list--entering .battle-pass-milestone:nth-child(6) { animation-delay: 175ms; }
 .game .battle-pass-list--entering .battle-pass-milestone:nth-child(7) { animation-delay: 210ms; }
 .game .battle-pass-list--entering .battle-pass-milestone:nth-child(8) { animation-delay: 245ms; }
-.game .battle-pass-list--entering .battle-pass-milestone.battle-pass-milestone--vfx:nth-child(-n+8) { animation: battle-pass-card-pulse .6s ease-out both; }
+.game .battle-pass-list--entering .battle-pass-milestone.battle-pass-milestone--vfx:nth-child(-n+8) { animation-name: battle-pass-card-enter, battle-pass-card-pulse; animation-duration: .42s, .6s; animation-timing-function: ease-out, ease-out; animation-fill-mode: both, both; }
 
 @keyframes battle-pass-screen-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes battle-pass-drift { from { transform: translate3d(-8px, -5px, 0) rotate(-7deg); } to { transform: translate3d(12px, 14px, 0) rotate(8deg); } }
