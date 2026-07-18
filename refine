@@ -13,6 +13,7 @@ fail() {
 auto=false
 print_task_path=false
 requested_task_id=
+research_file=
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --auto)
@@ -21,6 +22,12 @@ while [ "$#" -gt 0 ]; do
             ;;
         --print-task-path)
             print_task_path=true
+            shift
+            ;;
+        --research-file)
+            shift
+            [ "$#" -gt 0 ] || fail '--research-file requires tasks/<six-hex>-research.md'
+            research_file=$1
             shift
             ;;
         --task-id)
@@ -38,7 +45,7 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
-[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT (optional: --task-id six-hex, --print-task-path)'
+[ "$#" -gt 0 ] || fail 'usage: ./refine [--auto] PROMPT (optional: --research-file tasks/<six-hex>-research.md, --task-id six-hex, --print-task-path)'
 
 # Automation callers need a machine-readable stdout value, while the normal
 # interview remains visible to the user. Keep all progress on stderr when the
@@ -159,6 +166,17 @@ PY
 )
 fi
 task_id=$(basename "$task_file" | sed 's/-todo\.md$//')
+if [ -n "$research_file" ]; then
+    canonical_research=$(cd "$(dirname "$research_file")" 2>/dev/null && printf '%s/%s\n' "$PWD" "$(basename "$research_file")") || fail "invalid research file: $research_file"
+    expected_research="$repo_root/tasks/${task_id}-research.md"
+    [ "$canonical_research" = "$expected_research" ] || fail 'research file must match --task-id'
+    [ -f "$canonical_research" ] || fail 'research report does not exist'
+    grep -q '^# RESEARCH INCOMPLETE' "$canonical_research" && fail 'research report is incomplete'
+    for heading in '## Sources consulted' '## Synthesis' '## Recommendations' '## Risks and limitations' '## Repository applicability'; do grep -qx "$heading" "$canonical_research" || fail 'research report has invalid schema'; done
+    source_section=$(sed -n '/^## Sources consulted$/,/^## Synthesis$/p' "$canonical_research")
+    [ "$(printf '%s\n' "$source_section" | grep -E '^[-*] ' | grep -Ec 'Google result.*https?://|https?://.*Google result')" -ge 10 ] || fail 'research report is not validated with ten direct Google sources'
+    research_file="tasks/${task_id}-research.md"
+fi
 DEV_FLOW_TASK_ID=$task_id
 TASK_SESSION_MODEL=$model
 export DEV_FLOW_TASK_ID TASK_SESSION_MODEL
@@ -196,6 +214,10 @@ The same complete history is embedded here so this new agent explicitly receives
 $history
 </history>
 Read the history before deciding what remains unsettled. Inspect the repository yourself for facts; ask the user only for decisions.
+
+Research advisory evidence (the original rough task remains authoritative):
+${research_file:-No research report was supplied.}
+If supplied, read this path yourself; do not embed its contents in the rough prompt.
 
 Do not implement the task and do not modify repository files, except for the final task file named below. Communicate with the refine CLI by creating exactly this JSON file:
 $response_file

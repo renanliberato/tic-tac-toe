@@ -9,8 +9,9 @@ DEV_FLOW_MODEL=${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}
 export DEV_FLOW_MODEL
 
 mode=prompt
+refine_auto=false
 case ${1-} in
-    --refine-auto) shift; [ "$#" -gt 0 ] || fail 'usage: ./dev-flow [--refine-auto] PROMPT | ./dev-flow --task tasks/<six-hex>-todo.md' ;;
+    --refine-auto) refine_auto=true; shift; [ "$#" -gt 0 ] || fail 'usage: ./dev-flow [--refine-auto] PROMPT | ./dev-flow --task tasks/<six-hex>-todo.md' ;;
     --task) mode=task; shift; [ "$#" -eq 1 ] || fail 'usage: ./dev-flow --task tasks/<six-hex>-todo.md' ;;
     '') fail 'usage: ./dev-flow PROMPT (a prompt is required)' ;;
 esac
@@ -57,12 +58,6 @@ mkdir -p tasks
 if [ "$mode" = prompt ]; then
     task_id=$(allocate_id)
     task_path="tasks/${task_id}-todo.md"
-    # Keep a truthful record even if synchronization/refinement is interrupted.
-    {
-        printf '# Incomplete refinement\n\n'
-        printf '> **REFINEMENT INCOMPLETE — do not implement this task yet.**\n\n'
-        printf '## Rough prompt\n\n%s\n' "$*"
-    } >"$task_path"
 else
     # Extract only the syntactic ID now so a possible preflight sync-conflict
     # session shares the eventual task prefix. Full canonical/tracked/clean
@@ -88,31 +83,55 @@ fi
 progress 'synchronizing: complete; creating worktree: active'
 worktree_path=$(./git-worktree-create)
 [ -n "$worktree_path" ] || fail 'could not create worktree'
-if [ "$mode" = prompt ]; then
-    # Preflight artifacts live in the primary checkout. Move only this task's
-    # artifacts into the linked worktree, where their lifecycle is committed.
-    if [ "$worktree_path" != "$repo_root" ]; then
-        cp tasks/"$task_id"-* "$worktree_path/tasks/" 2>/dev/null || true
-        rm -f tasks/"$task_id"-*
-    fi
-fi
 cd "$worktree_path"
 export DEV_FLOW_TASK_ID=$task_id
 . ./task-session
 
 if [ "$mode" = prompt ]; then
-    progress 'creating worktree: complete; refining (round 1): active'
-    task_path=$(./refine --auto --task-id "$task_id" --print-task-path "$*" 2>/dev/null) || fail 'refinement failed; todo and session artifacts were retained'
-    task_path=${task_path#./}
-    [ "$task_path" = "tasks/${task_id}-todo.md" ] || fail 'refine returned an invalid task path'
-    progress 'refining: complete; committing task artifacts: complete'
+    # Checkpoint this linked worktree before creating task artifacts. In the
+    # direct route they remain visible and are committed with implementation.
+    ./git-save >/dev/null
+fi
+
+if [ "$mode" = prompt ]; then
+    report_path="tasks/${task_id}-research.md"
+    # This is deliberately unrefined: research is advisory and the original prompt remains authoritative.
+    {
+        printf '# Unrefined task\n\n## Original prompt\n\n%s\n\n' "$*"
+        printf '## Advisory research\n\nRead `%s` as advisory evidence only; the original prompt is authoritative.\n' "$report_path"
+    } > "$task_path"
+    if [ -x ./research ]; then
+        progress 'creating worktree: complete; researching: active'
+        returned=$(./research --task-id "$task_id" --print-research-path "$*" 2>/dev/null) || fail 'research failed; todo, report diagnostics, and researcher transcripts were retained'
+        [ "$returned" = "./$report_path" ] || fail 'research returned an invalid report path'
+    else
+        # Compatibility for deliberately minimal external test harnesses which
+        # copy dev-flow without its project-controlled research dependency.
+        progress 'creating worktree: complete; researching: unavailable in incomplete harness; skipped'
+    fi
+    if [ "$refine_auto" = true ]; then
+        progress 'researching: complete; refining (round 1): active'
+        task_path=$(./refine --auto --task-id "$task_id" --research-file "$report_path" --print-task-path "$*" 2>/dev/null) || fail 'refinement failed; task artifacts were retained'
+        task_path=${task_path#./}
+        [ "$task_path" = "tasks/${task_id}-todo.md" ] || fail 'refine returned an invalid task path'
+        progress 'refining: complete; committing task artifacts: complete'
+    else
+        progress 'researching: complete; refining: skipped; task remains explicitly unrefined'
+    fi
 else
     progress 'creating worktree: complete; refining: skipped; committing task artifacts: already committed'
 fi
 
-./git-save >/dev/null
+# Refined artifacts and pre-existing task files are checkpointed separately;
+# unrefined prompt artifacts deliberately remain for the implementation commit.
+if [ "$mode" = task ] || [ "$refine_auto" = true ]; then
+    ./git-save >/dev/null
+fi
 progress 'implementing: active'
 implement_prompt="Implement the self-contained task in $task_path. Keep tasks/${task_id}-todo.md; the orchestration will rename it to done after implementation."
+if [ -f "tasks/${task_id}-research.md" ]; then
+    implement_prompt="$implement_prompt Read and consider tasks/${task_id}-research.md as advisory evidence only; the reviewed todo/original prompt remains authoritative."
+fi
 if ! task_session implementer mswea "$DEV_FLOW_MODEL" --yolo --exit-immediately -t "$implement_prompt" </dev/null; then
     fail 'implementation agent failed (see task session transcript)'
 fi
