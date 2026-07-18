@@ -3,6 +3,12 @@ Feature: Playing against the Computer
   I want to play X against a random Computer opponent
   So that nobody can manually play O
 
+  Scenario: The home screen omits the obsolete title
+    Given I open the tic-tac-toe game
+    Then the home screen is visible
+    And the home screen has no obsolete title
+    And the home screen is labelled "Home"
+
   Scenario: A Computer match starts immediately
     Given I open the tic-tac-toe game
     Then the home screen is visible

@@ -161,6 +161,16 @@ Then("the home screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, false);
 });
 
+Then("the home screen has no obsolete title", function () {
+  assert.equal(this.dom.window.document.querySelector("#home-title"), null);
+});
+
+Then("the home screen is labelled {string}", function (label) {
+  const home = this.dom.window.document.querySelector("#home-screen");
+  assert.equal(home.getAttribute("aria-label"), label);
+  assert.equal(home.hasAttribute("aria-labelledby"), false);
+});
+
 Then("the home screen is hidden", function () {
   assert.equal(this.dom.window.document.querySelector("#home-screen").hidden, true);
 });

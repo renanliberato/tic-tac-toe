@@ -147,16 +147,6 @@ body {
   line-height: 1;
 }
 
-.game #home-screen h2 {
-  position: relative;
-  z-index: 1;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font-size: 64px;
-  line-height: 1.1;
-  letter-spacing: .08em;
-}
 
 .game .home-preview {
   position: absolute;

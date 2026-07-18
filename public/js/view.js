@@ -39,7 +39,6 @@ export class GameView {
     this.now = clock;
     this.gameRoot = documentRef.querySelector(".game");
     this.homeScreen = documentRef.querySelector("#home-screen");
-    this.homeTitle = documentRef.querySelector("#home-title");
     this.gameScreen = documentRef.querySelector("#game-screen");
     this.leaderboardScreen = documentRef.querySelector("#leaderboard-screen");
     this.leaderboardEntry = documentRef.querySelector("#open-leaderboard");
@@ -365,22 +364,7 @@ export class GameView {
     }
   }
 
-  ensureHomeTitle() {
-    if (!this.homeScreen) return;
-
-    if (!this.homeTitle || !this.homeScreen.contains(this.homeTitle)) {
-      this.homeTitle = this.document.createElement("h2");
-      this.homeTitle.id = "home-title";
-      this.homeTitle.textContent = "TIC TAC TOE";
-      const preview = this.homeScreen.querySelector(".home-preview");
-      this.homeScreen.insertBefore(this.homeTitle, preview || this.start || null);
-    }
-
-    this.homeTitle.hidden = false;
-  }
-
   enterHome(player, onConsumed) {
-    this.ensureHomeTitle();
     this.finishCoinPresentation();
 
     const balance = Number.isInteger(player?.coin_balance) && player.coin_balance >= 0
@@ -853,7 +837,6 @@ export class GameView {
     this.stopLeaderboard();
     [this.homeScreen, this.battlePassScreen, this.profileScreen, this.stylesScreen, this.gameScreen]
       .forEach((screen) => { if (screen) screen.hidden = screen !== this.homeScreen; });
-    this.ensureHomeTitle();
     if (this.dailyGiftLauncher) this.dailyGiftLauncher.hidden = false;
     if (options.focusLeaderboard) this.leaderboardEntry?.focus();
     else if (options.focusBattlePass) this.battlePassEntry?.focus();
