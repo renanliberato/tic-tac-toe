@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import readline from "node:readline";
+import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
 import { getBattlePassCycle } from "../../public/js/battle-pass.js";
+import { parseResearchAction } from "../../scripts/research-environment.mjs";
 import { After, Given, Then, When, setWorldConstructor } from "@cucumber/cucumber";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -72,7 +78,9 @@ class AppWorld {
 
 setWorldConstructor(AppWorld);
 
-After(function () {
+After(async function () {
+  await this.researchService?.close();
+  if (this.researchWorkspace) rmSync(this.researchWorkspace, { recursive: true, force: true });
   if (!this.dom) return;
 
   this.turnAnnouncementObserver?.disconnect();
@@ -814,4 +822,251 @@ Then("the Floor Is Lava attempt has {int} win and active status", function (wins
   assert.deepEqual(player.floor_is_lava, {
     date: "2030-06-15", status: "active", wins, revision: wins, pending_progress: true, payout: 0
   });
+});
+function startResearchService(directory, searchPage) {
+  const report = path.join(directory, "report.md");
+  const response = path.join(directory, "response.json");
+  const args = searchPage ? ["--import", path.join(root, "tests", "support", "research-puppeteer-hook.mjs")] : [];
+  const child = spawn(process.execPath, [
+    ...args, path.join(root, "scripts", "research-helper.mjs"), "serve", path.join(directory, "profile"), "5", "1", "1",
+    path.join(directory, "ledger.json"), report, response
+  ], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: searchPage ? { ...process.env, RESEARCH_FEATURE_SEARCH_PAGE: JSON.stringify(searchPage) } : process.env
+  });
+  const replies = [];
+  let resolveReply;
+  const output = readline.createInterface({ input: child.stdout });
+  output.on("line", line => {
+    const reply = JSON.parse(line);
+    if (resolveReply) {
+      const resolve = resolveReply;
+      resolveReply = undefined;
+      resolve(reply);
+    } else replies.push(reply);
+  });
+  return {
+    report,
+    response,
+    request(action) {
+      if (replies.length) return Promise.resolve(replies.shift());
+      return new Promise((resolve, reject) => {
+        resolveReply = resolve;
+        child.stdin.write(`${JSON.stringify(action)}\n`, error => {
+          if (error) {
+            resolveReply = undefined;
+            reject(error);
+          }
+        });
+      });
+    },
+    async close() {
+      child.stdin.end();
+      await new Promise(resolve => child.once("exit", resolve));
+      output.close();
+    }
+  };
+}
+
+function researchReport(urls) {
+  return [
+    "# Advisory research",
+    "",
+    "## Sources consulted",
+    ...urls.map((url, index) => `- Title: Source ${index} | URL: ${url} | Route: Google result | Evidence: This source supports the finding.`),
+    "",
+    "## Synthesis",
+    "The sources were reviewed.",
+    "",
+    "## Recommendations",
+    "Apply the evidence carefully.",
+    "",
+    "## Risks and limitations",
+    "Evidence can become stale.",
+    "",
+    "## Repository applicability",
+    "The evidence is advisory for this repository."
+  ].join("\n");
+}
+
+
+Given("a running research helper service", function () {
+  this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
+  this.researchService = startResearchService(this.researchWorkspace);
+});
+
+function organicResults(count = 10) {
+  return Array.from({ length: count }, (_, index) =>
+    `<article><a href="https://source${index}.example/article"><h3>Organic result ${index}</h3></a></article>`
+  ).join("");
+}
+
+Given("a running research helper service with an organic Google results response", function () {
+  this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
+  this.researchService = startResearchService(this.researchWorkspace, {
+    html: `<nav><a href="https://www.google.com/preferences">Settings</a></nav><main id="search">${organicResults()}</main>`
+  });
+});
+
+Given("a running research helper service with a {string} Google response", function (response) {
+  this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
+  const pages = {
+    challenge: {
+      url: "https://www.google.com/sorry/index?continue=search",
+      html: `<main id="search">${organicResults()}</main><p>Our systems have detected unusual traffic from your computer network.</p>`
+    },
+    insufficient: { html: `<main id="search">${organicResults(1)}</main>` },
+    "in-results-navigation": {
+      html: `<main id="search">${organicResults(9)}<article><a href="https://www.google.com/search?q=more+evidence"><h3>More results</h3></a></article></main>`
+    },
+    "canonical-duplicate": {
+      html: `<main id="search">${organicResults(9)}<article><a href="https://source0.example/article?utm_source=google#duplicate"><h3>Duplicate result</h3></a></article></main>`
+    }
+  };
+  assert.ok(pages[response], `Unknown Google response fixture: ${response}`);
+  this.researchService = startResearchService(this.researchWorkspace, pages[response]);
+});
+
+When("I search through the research helper service", async function () {
+  this.researchSearchReply = await this.researchService.request({ action: "search", query: "evidence" });
+});
+
+Then("the research helper returns ten organic Google result handles", function () {
+  assert.equal(this.researchSearchReply.ok, true);
+  assert.equal(this.researchSearchReply.data.length, 10);
+  assert.deepEqual(this.researchSearchReply.data.map(result => result.title),
+    Array.from({ length: 10 }, (_, index) => `Organic result ${index}`));
+  assert.deepEqual(this.researchSearchReply.data.map(result => result.handle),
+    Array.from({ length: 10 }, (_, index) => `g1-${index}`));
+});
+
+Then("the research helper excludes Google navigation links from the results", function () {
+  assert.equal(this.researchSearchReply.data.some(result => result.url === "https://www.google.com/preferences"), false);
+});
+
+Then("the research helper rejects the search as a {string}", function (reason) {
+  assert.equal(this.researchSearchReply.ok, false);
+  assert.match(this.researchSearchReply.error, new RegExp(reason));
+});
+
+When("I write and read its assigned research artifacts", async function () {
+  const service = this.researchService;
+  this.researchServiceList = await service.request({ action: "list" });
+  this.researchServiceReport = await service.request({
+    action: "write-report", path: service.report, content: "# Staged research"
+  });
+  this.researchServiceResponse = await service.request({
+    action: "write-response", path: service.response, content: "{\"status\":\"draft\"}"
+  });
+  this.researchServiceRead = await service.request({ action: "read", path: service.report });
+  this.researchServiceRejectedWrite = await service.request({
+    action: "write-report", path: path.join(this.researchWorkspace, "outside.md"), content: "blocked"
+  });
+});
+
+Then("the research helper reports the staged artifact contents", function () {
+  const service = this.researchService;
+  assert.deepEqual(this.researchServiceList, {
+    ok: true,
+    data: { report: service.report, response: service.response, opened: [] }
+  });
+  assert.deepEqual(this.researchServiceReport, { ok: true, data: { written: service.report } });
+  assert.deepEqual(this.researchServiceResponse, { ok: true, data: { written: service.response } });
+  assert.deepEqual(this.researchServiceRead, { ok: true, data: "# Staged research" });
+});
+
+Then("the research helper rejects an unassigned report path", function () {
+  assert.deepEqual(this.researchServiceRejectedWrite, {
+    ok: false,
+    error: "report may only be written to its staging path"
+  });
+});
+
+Given("a task-scoped research workspace", function () {
+  const workspace = mkdtempSync(path.join(os.tmpdir(), "research-feature-"));
+  this.researchWorkspace = workspace;
+  writeFileSync(path.join(workspace, "README.md"), "research acceptance fixture\n");
+  execFileSync("git", ["init", "--quiet"], { cwd: workspace });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: workspace });
+  execFileSync("git", ["config", "user.name", "Research Feature"], { cwd: workspace });
+  execFileSync("git", ["add", "README.md"], { cwd: workspace });
+  execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: workspace });
+  mkdirSync(path.join(workspace, "tasks"));
+  writeFileSync(path.join(workspace, "tasks", ".gitkeep"), "");
+  copyFileSync(path.join(root, "research"), path.join(workspace, "research"));
+  copyFileSync(path.join(root, "task-session"), path.join(workspace, "task-session"));
+  chmodSync(path.join(workspace, "research"), 0o755);
+  chmodSync(path.join(workspace, "task-session"), 0o755);
+
+  const helper = path.join(workspace, "helper.mjs");
+  writeFileSync(helper, `#!/usr/bin/env node
+import { spawnSync } from "node:child_process";
+if (process.argv[2] === "preflight") process.stdout.write("ok\\n");
+else {
+  const result = spawnSync(process.execPath, [${JSON.stringify(path.join(root, "scripts/research-helper.mjs"))}, ...process.argv.slice(2)], { encoding: "utf8" });
+  process.stdout.write(result.stdout || "");
+  process.stderr.write(result.stderr || "");
+  process.exit(result.status ?? 1);
+}
+`);
+  chmodSync(helper, 0o755);
+
+  const agent = path.join(workspace, "agent.mjs");
+  writeFileSync(agent, `#!/usr/bin/env node
+import fs from "node:fs";
+const urls = Array.from({ length: 10 }, (_, index) => \`https://source\${index}.example/article\`);
+const report = ${researchReport.toString()}(urls);
+fs.writeFileSync(process.env.RESEARCH_STAGING_REPORT, report);
+fs.writeFileSync(process.env.RESEARCH_LEDGER_FILE, JSON.stringify(urls.map((url, index) => ({ url, title: "Source " + index, opened: true, route: "Google result" }))));
+fs.writeFileSync(process.env.RESEARCH_RESPONSE_FILE, JSON.stringify({ status: "RESEARCH_FINISHED", research_file: process.env.RESEARCH_EXPECTED_REPORT, source_count: 10 }));
+`);
+  chmodSync(agent, 0o755);
+  this.researchHelper = helper;
+  this.researchAgent = agent;
+});
+
+When("I run research with a valid staged synthesis", function () {
+  this.researchResult = spawnSync("./research", ["--task-id", "abc123", "--print-research-path", "Research the task"], {
+    cwd: this.researchWorkspace,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      RESEARCH_HELPER: this.researchHelper,
+      RESEARCH_AGENT: this.researchAgent,
+      RESEARCH_MAX_ATTEMPTS: "1",
+      RESEARCH_ATTEMPT_SECONDS: "5"
+    }
+  });
+});
+
+Then("the task-scoped research report is published", function () {
+  assert.equal(this.researchResult.status, 0, this.researchResult.stderr);
+  assert.equal(this.researchResult.stdout.trim(), "./tasks/abc123-research.md");
+  this.publishedResearchReport = path.join(this.researchWorkspace, "tasks", "abc123-research.md");
+  assert.equal(readFileSync(this.publishedResearchReport, "utf8").includes("## Synthesis"), true);
+});
+
+Then("the report records ten consulted sources", function () {
+  const report = readFileSync(this.publishedResearchReport, "utf8");
+  assert.equal((report.match(/^[-*]\s+Title: .+ \| URL: https:\/\//gm) || []).length, 10);
+});
+
+When("a researcher submits a valid declared search action", function () {
+  this.researchAction = parseResearchAction("researchctl {\"action\":\"search\",\"query\":\"tic tac toe evidence\"}");
+});
+
+Then("the action boundary returns the declared search action", function () {
+  assert.deepEqual(this.researchAction, { action: "search", query: "tic tac toe evidence" });
+});
+
+When("the researcher submits a multi-line action", function () {
+  try {
+    parseResearchAction("researchctl {\"action\":\"list\"}\necho unsafe");
+  } catch (error) {
+    this.researchActionError = error;
+  }
+});
+
+Then("the action boundary rejects the action", function () {
+  assert.match(this.researchActionError.message, /only one researchctl action/);
 });
