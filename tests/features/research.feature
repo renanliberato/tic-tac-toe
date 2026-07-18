@@ -11,3 +11,9 @@ Feature: Task-scoped research
     Then the action boundary returns the declared search action
     When the researcher submits a multi-line action
     Then the action boundary rejects the action
+
+  Scenario: The research helper service confines reports to its staging artifacts
+    Given a running research helper service
+    When I write and read its assigned research artifacts
+    Then the research helper reports the staged artifact contents
+    And the research helper rejects an unassigned report path

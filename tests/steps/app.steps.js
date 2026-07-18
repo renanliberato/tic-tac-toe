@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import readline from "node:readline";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { JSDOM } from "jsdom";
@@ -68,7 +69,8 @@ class AppWorld {
 
 setWorldConstructor(AppWorld);
 
-After(function () {
+After(async function () {
+  await this.researchService?.close();
   if (this.researchWorkspace) rmSync(this.researchWorkspace, { recursive: true, force: true });
   if (!this.dom) return;
 
@@ -750,12 +752,53 @@ Then("no coin celebration is active", function () {
   );
 });
 
+function startResearchService(directory) {
+  const report = path.join(directory, "report.md");
+  const response = path.join(directory, "response.json");
+  const child = spawn(process.execPath, [
+    path.join(root, "scripts", "research-helper.mjs"), "serve", path.join(directory, "profile"), "5", "1", "1",
+    path.join(directory, "ledger.json"), report, response
+  ], { stdio: ["pipe", "pipe", "pipe"] });
+  const replies = [];
+  let resolveReply;
+  const output = readline.createInterface({ input: child.stdout });
+  output.on("line", line => {
+    const reply = JSON.parse(line);
+    if (resolveReply) {
+      const resolve = resolveReply;
+      resolveReply = undefined;
+      resolve(reply);
+    } else replies.push(reply);
+  });
+  return {
+    report,
+    response,
+    request(action) {
+      if (replies.length) return Promise.resolve(replies.shift());
+      return new Promise((resolve, reject) => {
+        resolveReply = resolve;
+        child.stdin.write(`${JSON.stringify(action)}\n`, error => {
+          if (error) {
+            resolveReply = undefined;
+            reject(error);
+          }
+        });
+      });
+    },
+    async close() {
+      child.stdin.end();
+      await new Promise(resolve => child.once("exit", resolve));
+      output.close();
+    }
+  };
+}
+
 function researchReport(urls) {
   return [
     "# Advisory research",
     "",
     "## Sources consulted",
-    ...urls.map((url) => `- ${url}`),
+    ...urls.map((url, index) => `- Title: Source ${index} | URL: ${url} | Route: Google result | Evidence: This source supports the finding.`),
     "",
     "## Synthesis",
     "The sources were reviewed.",
@@ -770,6 +813,45 @@ function researchReport(urls) {
     "The evidence is advisory for this repository."
   ].join("\n");
 }
+
+
+Given("a running research helper service", function () {
+  this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
+  this.researchService = startResearchService(this.researchWorkspace);
+});
+
+When("I write and read its assigned research artifacts", async function () {
+  const service = this.researchService;
+  this.researchServiceList = await service.request({ action: "list" });
+  this.researchServiceReport = await service.request({
+    action: "write-report", path: service.report, content: "# Staged research"
+  });
+  this.researchServiceResponse = await service.request({
+    action: "write-response", path: service.response, content: "{\"status\":\"draft\"}"
+  });
+  this.researchServiceRead = await service.request({ action: "read", path: service.report });
+  this.researchServiceRejectedWrite = await service.request({
+    action: "write-report", path: path.join(this.researchWorkspace, "outside.md"), content: "blocked"
+  });
+});
+
+Then("the research helper reports the staged artifact contents", function () {
+  const service = this.researchService;
+  assert.deepEqual(this.researchServiceList, {
+    ok: true,
+    data: { report: service.report, response: service.response, opened: [] }
+  });
+  assert.deepEqual(this.researchServiceReport, { ok: true, data: { written: service.report } });
+  assert.deepEqual(this.researchServiceResponse, { ok: true, data: { written: service.response } });
+  assert.deepEqual(this.researchServiceRead, { ok: true, data: "# Staged research" });
+});
+
+Then("the research helper rejects an unassigned report path", function () {
+  assert.deepEqual(this.researchServiceRejectedWrite, {
+    ok: false,
+    error: "report may only be written to its staging path"
+  });
+});
 
 Given("a task-scoped research workspace", function () {
   const workspace = mkdtempSync(path.join(os.tmpdir(), "research-feature-"));
@@ -806,7 +888,7 @@ import fs from "node:fs";
 const urls = Array.from({ length: 10 }, (_, index) => \`https://source\${index}.example/article\`);
 const report = ${researchReport.toString()}(urls);
 fs.writeFileSync(process.env.RESEARCH_STAGING_REPORT, report);
-fs.writeFileSync(process.env.RESEARCH_LEDGER_FILE, JSON.stringify(urls.map((url) => ({ url, opened: true, route: "Google result" }))));
+fs.writeFileSync(process.env.RESEARCH_LEDGER_FILE, JSON.stringify(urls.map((url, index) => ({ url, title: "Source " + index, opened: true, route: "Google result" }))));
 fs.writeFileSync(process.env.RESEARCH_RESPONSE_FILE, JSON.stringify({ status: "RESEARCH_FINISHED", research_file: process.env.RESEARCH_EXPECTED_REPORT, source_count: 10 }));
 `);
   chmodSync(agent, 0o755);
@@ -837,7 +919,7 @@ Then("the task-scoped research report is published", function () {
 
 Then("the report records ten consulted sources", function () {
   const report = readFileSync(this.publishedResearchReport, "utf8");
-  assert.equal((report.match(/^[-*]\s+https:\/\//gm) || []).length, 10);
+  assert.equal((report.match(/^[-*]\s+Title: .+ \| URL: https:\/\//gm) || []).length, 10);
 });
 
 When("a researcher submits a valid declared search action", function () {
