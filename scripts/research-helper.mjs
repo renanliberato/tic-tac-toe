@@ -130,8 +130,23 @@ export class BrowserBoundary {
   async search(query) {
     if (++this.searches > this.opts.maxSearches) throw new Error('search quota exceeded');
     await this.goto('https://www.google.com/search?q=' + encodeURIComponent(query));
-    const rows = await this.page.$$eval('a[href]', as => as.map(a => ({ title: (a.textContent || '').trim(), url: a.href })).filter(x => x.title && /^https?:/.test(x.url)).slice(0, 20));
-    return rows.map((x, i) => {
+    const search = await this.page.$$eval('html', roots => {
+      const doc = roots[0].ownerDocument;
+      const text = (doc.body?.innerText || doc.body?.textContent || '').toLowerCase();
+      const challenge = /^\/sorry(?:\/|$)/.test(doc.location.pathname) ||
+        text.includes('our systems have detected unusual traffic') ||
+        text.includes("to continue, please verify that you're not a robot") ||
+        text.includes('why did this happen?');
+      const anchors = [...doc.querySelectorAll('#search a[href], #rso a[href]')];
+      const rows = anchors.map(a => {
+        const heading = a.querySelector('h3');
+        return { title: (heading?.textContent || '').trim(), url: a.href };
+      }).filter(x => x.title && /^https?:/.test(x.url));
+      return { challenge, rows: rows.slice(0, 20) };
+    });
+    if (search.challenge) throw new Error('Google search returned a challenge page');
+    if (search.rows.length < 10) throw new Error('Google search returned fewer than ten organic results');
+    return search.rows.map((x, i) => {
       const h = 'g' + this.searches + '-' + i;
       this.handles.set(h, { ...x, route: 'Google result' });
       return { handle: h, title: x.title, url: x.url };

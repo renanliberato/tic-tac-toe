@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { JSDOM } from "jsdom";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import readline from "node:readline";
@@ -159,6 +160,68 @@ describe("research helper", () => {
       expect(() => validateReport(report, "/unused/expected-report.md", ledger))
         .toThrow("Title, URL, Route, and Evidence");
     }
+  });
+
+  it("creates Google-result handles only for organic result cards", async () => {
+    const results = Array.from({ length: 10 }, (_, index) =>
+      `<article><a href="https://source${index}.example/article"><h3>Organic result ${index}</h3></a></article>`
+    ).join("");
+    const dom = new JSDOM(`
+      <nav>
+        <a href="https://www.google.com/preferences">Settings</a>
+        <a href="https://support.google.com/search">Learn more</a>
+      </nav>
+      <main id="search">${results}</main>
+    `, { url: "https://www.google.com/search?q=evidence" });
+    const boundary = new BrowserBoundary({ maxSearches: 1, maxOpens: 10 });
+    boundary.page = {
+      $$eval: async (selector, callback) => callback([...dom.window.document.querySelectorAll(selector)])
+    };
+    boundary.goto = async () => {};
+
+    const handles = await boundary.search("evidence");
+
+    expect(handles).toHaveLength(10);
+    expect(handles.map(handle => handle.title)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `Organic result ${index}`)
+    );
+    expect(handles.map(handle => handle.url)).not.toContain("https://www.google.com/preferences");
+    expect(handles.map(handle => handle.url)).not.toContain("https://support.google.com/search");
+  });
+
+  it("rejects CAPTCHA pages before their anchors can become Google-result handles", async () => {
+    const dom = new JSDOM(`
+      <main id="search">
+        <a href="https://www.google.com/terms"><h3>Google Terms of Service</h3></a>
+        <a href="https://support.google.com"><h3>Learn more</h3></a>
+      </main>
+      <p>Our systems have detected unusual traffic from your computer network.</p>
+      <a href="https://www.google.com/sorry/index">Why did this happen?</a>
+    `, { url: "https://www.google.com/sorry/index?continue=https://www.google.com/search" });
+    const boundary = new BrowserBoundary({ maxSearches: 1, maxOpens: 10 });
+    boundary.page = {
+      $$eval: async (selector, callback) => callback([...dom.window.document.querySelectorAll(selector)])
+    };
+    boundary.goto = async () => {};
+
+    await expect(boundary.search("evidence")).rejects.toThrow("challenge page");
+    expect(boundary.handles.size).toBe(0);
+  });
+
+  it("rejects search pages that do not provide ten organic result cards", async () => {
+    const dom = new JSDOM(`
+      <main id="search">
+        <a href="https://source.example/article"><h3>Only result</h3></a>
+      </main>
+    `, { url: "https://www.google.com/search?q=evidence" });
+    const boundary = new BrowserBoundary({ maxSearches: 1, maxOpens: 10 });
+    boundary.page = {
+      $$eval: async (selector, callback) => callback([...dom.window.document.querySelectorAll(selector)])
+    };
+    boundary.goto = async () => {};
+
+    await expect(boundary.search("evidence")).rejects.toThrow("fewer than ten organic results");
+    expect(boundary.handles.size).toBe(0);
   });
 
   it("aborts a private redirect target before the browser continues it", async () => {

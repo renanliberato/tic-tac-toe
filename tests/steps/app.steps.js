@@ -752,13 +752,17 @@ Then("no coin celebration is active", function () {
   );
 });
 
-function startResearchService(directory) {
+function startResearchService(directory, searchPage) {
   const report = path.join(directory, "report.md");
   const response = path.join(directory, "response.json");
+  const args = searchPage ? ["--import", path.join(root, "tests", "support", "research-puppeteer-hook.mjs")] : [];
   const child = spawn(process.execPath, [
-    path.join(root, "scripts", "research-helper.mjs"), "serve", path.join(directory, "profile"), "5", "1", "1",
+    ...args, path.join(root, "scripts", "research-helper.mjs"), "serve", path.join(directory, "profile"), "5", "1", "1",
     path.join(directory, "ledger.json"), report, response
-  ], { stdio: ["pipe", "pipe", "pipe"] });
+  ], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: searchPage ? { ...process.env, RESEARCH_FEATURE_SEARCH_PAGE: JSON.stringify(searchPage) } : process.env
+  });
   const replies = [];
   let resolveReply;
   const output = readline.createInterface({ input: child.stdout });
@@ -818,6 +822,54 @@ function researchReport(urls) {
 Given("a running research helper service", function () {
   this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
   this.researchService = startResearchService(this.researchWorkspace);
+});
+
+function organicResults(count = 10) {
+  return Array.from({ length: count }, (_, index) =>
+    `<article><a href="https://source${index}.example/article"><h3>Organic result ${index}</h3></a></article>`
+  ).join("");
+}
+
+Given("a running research helper service with an organic Google results response", function () {
+  this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
+  this.researchService = startResearchService(this.researchWorkspace, {
+    html: `<nav><a href="https://www.google.com/preferences">Settings</a></nav><main id="search">${organicResults()}</main>`
+  });
+});
+
+Given("a running research helper service with a {string} Google response", function (response) {
+  this.researchWorkspace = mkdtempSync(path.join(os.tmpdir(), "research-service-feature-"));
+  const pages = {
+    challenge: {
+      url: "https://www.google.com/sorry/index?continue=search",
+      html: `<main id="search">${organicResults()}</main><p>Our systems have detected unusual traffic from your computer network.</p>`
+    },
+    insufficient: { html: `<main id="search">${organicResults(1)}</main>` }
+  };
+  assert.ok(pages[response], `Unknown Google response fixture: ${response}`);
+  this.researchService = startResearchService(this.researchWorkspace, pages[response]);
+});
+
+When("I search through the research helper service", async function () {
+  this.researchSearchReply = await this.researchService.request({ action: "search", query: "evidence" });
+});
+
+Then("the research helper returns ten organic Google result handles", function () {
+  assert.equal(this.researchSearchReply.ok, true);
+  assert.equal(this.researchSearchReply.data.length, 10);
+  assert.deepEqual(this.researchSearchReply.data.map(result => result.title),
+    Array.from({ length: 10 }, (_, index) => `Organic result ${index}`));
+  assert.deepEqual(this.researchSearchReply.data.map(result => result.handle),
+    Array.from({ length: 10 }, (_, index) => `g1-${index}`));
+});
+
+Then("the research helper excludes Google navigation links from the results", function () {
+  assert.equal(this.researchSearchReply.data.some(result => result.url === "https://www.google.com/preferences"), false);
+});
+
+Then("the research helper rejects the search as a {string}", function (reason) {
+  assert.equal(this.researchSearchReply.ok, false);
+  assert.match(this.researchSearchReply.error, new RegExp(reason));
 });
 
 When("I write and read its assigned research artifacts", async function () {

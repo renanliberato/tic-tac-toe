@@ -17,3 +17,19 @@ Feature: Task-scoped research
     When I write and read its assigned research artifacts
     Then the research helper reports the staged artifact contents
     And the research helper rejects an unassigned report path
+
+  Scenario: The helper service returns only organic Google result handles
+    Given a running research helper service with an organic Google results response
+    When I search through the research helper service
+    Then the research helper returns ten organic Google result handles
+    And the research helper excludes Google navigation links from the results
+
+  Scenario Outline: The helper service rejects unusable Google search responses
+    Given a running research helper service with a "<response>" Google response
+    When I search through the research helper service
+    Then the research helper rejects the search as a "<reason>"
+
+    Examples:
+      | response            | reason                |
+      | challenge           | challenge page                 |
+      | insufficient        | fewer than ten organic results |
