@@ -53,8 +53,16 @@ export class GameView {
     this.battlePassHeading = documentRef.querySelector("#battle-pass-title");
     this.battlePassProgress = documentRef.querySelector("[data-battle-pass-progress]");
     this.battlePassReset = documentRef.querySelector("[data-battle-pass-reset]");
+    this.battlePassTargetText = documentRef.querySelector("[data-battle-pass-target-text]");
+    this.battlePassKeepPlaying = documentRef.querySelector("[data-battle-pass-keep-playing]");
+    this.battlePassComplete = documentRef.querySelector("[data-battle-pass-complete]");
+    this.battlePassPercent = documentRef.querySelector("[data-battle-pass-percent]");
+    this.battlePassProgressBar = documentRef.querySelector("[data-battle-pass-progress-bar]");
+    this.battlePassProgressFill = documentRef.querySelector("[data-battle-pass-progress-fill]");
     this.battlePassList = documentRef.querySelector("#battle-pass-list");
     this.battlePassAnnouncement = documentRef.querySelector("#battle-pass-announcement");
+    this.battlePassVfxTimer = null;
+    this.battlePassHasRendered = false;
     this.profileScreen = documentRef.querySelector("#profile-screen");
     this.stylesScreen = documentRef.querySelector("#styles-screen");
     this.profileButton = documentRef.querySelector("#open-profile");
@@ -871,9 +879,34 @@ export class GameView {
 
   showBattlePass(player, timestamp = this.now()) {
     this.stopLeaderboard();
+    this.clearBattlePassVfx();
+    this.battlePassHasRendered = false;
     this.renderBattlePass(player, timestamp);
     this.hideScreens(this.battlePassScreen);
+    this.battlePassScreen?.classList.remove("battle-pass-screen--entering");
+    void this.battlePassScreen?.offsetWidth;
+    this.battlePassScreen?.classList.add("battle-pass-screen--entering");
     this.battlePassHeading?.focus();
+    this.scrollBattlePassToTarget();
+  }
+
+  scrollBattlePassToTarget() {
+    const list = this.battlePassList;
+    const target = list?.querySelector("[data-battle-pass-target]");
+    if (!list || !target) return;
+    const reducedMotion = this.isReducedMotion();
+    const behavior = reducedMotion ? "auto" : "smooth";
+    const listRect = list.getBoundingClientRect?.();
+    const targetRect = target.getBoundingClientRect?.();
+    const listHeight = list.clientHeight || listRect?.height || 0;
+    const targetHeight = target.offsetHeight || targetRect?.height || 0;
+    const targetOffset = target.offsetTop || 0;
+    const relativeTop = listRect && targetRect
+      ? targetRect.top - listRect.top + list.scrollTop
+      : targetOffset;
+    const top = Math.max(0, relativeTop - Math.max(0, (listHeight - targetHeight) / 2));
+    if (typeof list.scrollTo === "function") list.scrollTo({ top, behavior });
+    else list.scrollTop = top;
   }
 
   hideScreens(active) {
@@ -894,28 +927,70 @@ export class GameView {
 
   renderBattlePass(player = {}, timestamp = this.now()) {
     const cycle = getBattlePassCycle(timestamp);
+    const count = BATTLE_PASS_MILESTONES.length;
     const points = Number.isInteger(player.battle_pass_points) && player.battle_pass_points >= 0
-      ? Math.min(player.battle_pass_points, BATTLE_PASS_MILESTONES.length) : 0;
+      ? Math.min(player.battle_pass_points, count) : 0;
     const claimed = new Set(Array.isArray(player.battle_pass_claimed)
       ? player.battle_pass_claimed : []);
-    if (this.battlePassProgress) {
-      this.battlePassProgress.textContent = `${points} / ${BATTLE_PASS_MILESTONES.length} points`;
-    }
+    const target = points === count ? null : BATTLE_PASS_MILESTONES.find((item) =>
+      item.points <= points && !claimed.has(item.milestone))
+      || BATTLE_PASS_MILESTONES.find((item) => item.points > points) || null;
+    const complete = points === count;
+    const canClaim = Boolean(target && target.points <= points);
+
+    if (this.battlePassProgress) this.battlePassProgress.textContent = `${points} / ${count} points`;
     if (this.battlePassReset) {
       this.battlePassReset.textContent = `Resets ${new Date(cycle.end).toISOString().slice(0, 10)}`;
     }
+    if (this.battlePassTargetText) {
+      this.battlePassTargetText.textContent = complete
+        ? ""
+        : `${Math.max(0, target.points - points)} points to milestone ${target.milestone}`;
+    }
+    if (this.battlePassKeepPlaying) {
+      this.battlePassKeepPlaying.hidden = complete || canClaim;
+    }
+    if (this.battlePassComplete) this.battlePassComplete.hidden = !complete;
+    if (this.battlePassPercent) this.battlePassPercent.textContent = `${points}%`;
+    if (this.battlePassProgressBar) {
+      this.battlePassProgressBar.setAttribute("aria-valuenow", String(points));
+      this.battlePassProgressBar.setAttribute("aria-valuetext", `${points}% complete`);
+    }
+    if (this.battlePassProgressFill) {
+      this.battlePassProgressFill.style.width = `${points}%`;
+    }
     if (!this.battlePassList) return;
 
-    const fragment = this.document.createDocumentFragment();
-    BATTLE_PASS_MILESTONES.forEach((item) => {
+    const content = this.document.createElement("div");
+    content.className = "battle-pass-scroll-content";
+    const rail = this.document.createElement("div");
+    rail.className = `battle-pass-rail${complete ? " battle-pass-rail--complete" : ""}`;
+    rail.dataset.battlePassRail = "";
+    rail.setAttribute("aria-hidden", "true");
+    rail.setAttribute("role", "presentation");
+    rail.style.setProperty("--battle-pass-fill", `${points}%`);
+    const railFill = this.document.createElement("span");
+    railFill.className = "battle-pass-rail__fill";
+    railFill.dataset.battlePassProgressFill = "";
+    railFill.setAttribute("aria-hidden", "true");
+    rail.append(railFill);
+    const cards = this.document.createElement("div");
+    cards.className = "battle-pass-cards";
+
+    BATTLE_PASS_MILESTONES.forEach((item, index) => {
       const reached = points >= item.points;
       const isClaimed = claimed.has(item.milestone);
+      const isTarget = target?.milestone === item.milestone;
       const button = this.document.createElement("button");
       button.type = "button";
       button.className = `battle-pass-milestone battle-pass-milestone--${
         isClaimed ? "claimed" : reached ? "available" : "locked"
-      }`;
+      }${isTarget ? " battle-pass-milestone--current" : ""}`;
       button.dataset.battlePassMilestone = String(item.milestone);
+      if (isTarget) {
+        button.dataset.battlePassTarget = "true";
+        button.setAttribute("aria-current", "step");
+      }
       button.disabled = isClaimed || !reached;
       button.setAttribute("aria-label", isClaimed
         ? `Milestone ${item.milestone}, claimed, ${item.reward} gold`
@@ -931,14 +1006,76 @@ export class GameView {
       requirement.textContent = `${item.points} point${item.points === 1 ? "" : "s"}`;
       const reward = this.document.createElement("span");
       reward.className = "battle-pass-milestone__reward";
-      reward.textContent = `+${item.reward} gold`;
+      const coin = this.document.createElement("span");
+      coin.className = "battle-pass-milestone__coin";
+      coin.textContent = "¢";
+      coin.setAttribute("aria-hidden", "true");
+      coin.setAttribute("role", "presentation");
+      const rewardLabel = this.document.createElement("span");
+      rewardLabel.className = "battle-pass-milestone__reward-label";
+      rewardLabel.textContent = `+${item.reward} gold`;
+      reward.append(coin, rewardLabel);
       const action = this.document.createElement("span");
       action.className = "battle-pass-milestone__action";
       action.textContent = isClaimed ? "Claimed" : reached ? "Claim" : "Locked";
       button.append(level, requirement, reward, action);
-      fragment.append(button);
+      cards.append(button);
+
+      const node = this.document.createElement("span");
+      node.className = `battle-pass-rail__node${
+        reached ? " battle-pass-rail__node--filled" : ""
+      }${isTarget ? " battle-pass-rail__node--target" : ""}`;
+      node.dataset.battlePassRailNode = String(item.milestone);
+      node.style.setProperty("--battle-pass-node-index", String(index));
+      node.setAttribute("aria-hidden", "true");
+      node.setAttribute("role", "presentation");
+      rail.append(node);
     });
-    this.battlePassList.replaceChildren(fragment);
+    content.append(rail, cards);
+    this.battlePassList.replaceChildren(content);
+    if (!this.battlePassHasRendered) {
+      this.battlePassList.classList.remove("battle-pass-list--entering");
+      void this.battlePassList.offsetWidth;
+      this.battlePassList.classList.add("battle-pass-list--entering");
+      this.battlePassHasRendered = true;
+    }
+  }
+
+  clearBattlePassVfx() {
+    if (this.battlePassVfxTimer !== null) {
+      globalThis.clearTimeout(this.battlePassVfxTimer);
+      this.battlePassVfxTimer = null;
+    }
+    this.battlePassList?.querySelectorAll(".battle-pass-milestone--vfx, .battle-pass-rail__node--flare")
+      .forEach((element) => element.classList.remove("battle-pass-milestone--vfx", "battle-pass-rail__node--flare"));
+    this.battlePassList?.querySelectorAll("[data-battle-pass-particle]")
+      .forEach((particle) => particle.remove());
+  }
+
+  triggerBattlePassVfx(milestone) {
+    this.clearBattlePassVfx();
+    if (this.isReducedMotion()) return;
+    const card = this.battlePassList?.querySelector(
+      `[data-battle-pass-milestone="${milestone}"]`
+    );
+    const node = this.battlePassList?.querySelector(
+      `[data-battle-pass-rail-node="${milestone}"]`
+    );
+    if (!card) return;
+    card.classList.add("battle-pass-milestone--vfx");
+    node?.classList.add("battle-pass-rail__node--flare");
+    for (let index = 0; index < 8; index += 1) {
+      const particle = this.document.createElement("span");
+      particle.className = `battle-pass-particle battle-pass-particle--${index % 4}`;
+      particle.dataset.battlePassParticle = "";
+      particle.setAttribute("aria-hidden", "true");
+      particle.setAttribute("role", "presentation");
+      particle.style.setProperty("--particle-angle", `${index * 45}deg`);
+      card.append(particle);
+    }
+    this.battlePassVfxTimer = globalThis.setTimeout(() => {
+      this.clearBattlePassVfx();
+    }, 620);
   }
 
   announceBattlePass(message) {

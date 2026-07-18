@@ -89,9 +89,32 @@
                 <button id="battle-pass-back" class="back-button" type="button" aria-label="Back to Home"><span aria-hidden="true">←</span><span>Back</span></button>
                 <h2 id="battle-pass-title" tabindex="-1">Battle Pass</h2>
             </header>
+            <div class="battle-pass-ambient" aria-hidden="true" role="presentation">
+                <span class="battle-pass-ambient__glow battle-pass-ambient__glow--one"></span>
+                <span class="battle-pass-ambient__glow battle-pass-ambient__glow--two"></span>
+                <span class="battle-pass-ambient__symbol battle-pass-ambient__symbol--x-one">×</span>
+                <span class="battle-pass-ambient__symbol battle-pass-ambient__symbol--o-one">○</span>
+                <span class="battle-pass-ambient__symbol battle-pass-ambient__symbol--x-two">×</span>
+                <span class="battle-pass-ambient__symbol battle-pass-ambient__symbol--o-two">○</span>
+                <span class="battle-pass-ambient__symbol battle-pass-ambient__symbol--x-three">×</span>
+                <span class="battle-pass-ambient__symbol battle-pass-ambient__symbol--o-three">○</span>
+            </div>
             <div class="battle-pass-summary">
-                <strong data-battle-pass-progress>0 / 100 points</strong>
-                <span data-battle-pass-reset></span>
+                <div class="battle-pass-summary__score">
+                    <strong data-battle-pass-progress>0 / 100 points</strong>
+                    <span data-battle-pass-reset></span>
+                </div>
+                <div class="battle-pass-summary__status">
+                    <span class="battle-pass-summary__target" data-battle-pass-target-text></span>
+                    <span class="battle-pass-summary__keep-playing" data-battle-pass-keep-playing hidden>Keep playing to unlock your next reward.</span>
+                    <strong class="battle-pass-summary__complete" data-battle-pass-complete hidden>Season complete</strong>
+                </div>
+                <div class="battle-pass-summary__meter">
+                    <span data-battle-pass-percent>0%</span>
+                    <span class="battle-pass-progress-bar" data-battle-pass-progress-bar role="progressbar" aria-label="Battle pass progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <span class="battle-pass-progress-bar__fill" data-battle-pass-progress-fill aria-hidden="true"></span>
+                    </span>
+                </div>
             </div>
             <div id="battle-pass-list" class="battle-pass-list" aria-label="Battle pass milestones"></div>
             <p id="battle-pass-announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>

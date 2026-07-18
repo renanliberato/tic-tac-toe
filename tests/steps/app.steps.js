@@ -486,6 +486,27 @@ Then("the battle pass progress says {string}", function (expected) {
   assert.equal(this.dom.window.document.querySelector("[data-battle-pass-progress]").textContent, expected);
 });
 
+Then("the battle pass percentage says {string}", function (expected) {
+  const documentRef = this.dom.window.document;
+  assert.equal(documentRef.querySelector("[data-battle-pass-percent]").textContent, expected);
+  assert.equal(documentRef.querySelector("[data-battle-pass-progress-bar]").getAttribute("aria-valuenow"),
+    expected.replace("%", ""));
+});
+
+Then("the current battle-pass target is milestone {int}", function (milestone) {
+  const target = this.dom.window.document.querySelector("[data-battle-pass-target]");
+  assert.ok(target, "The current battle-pass target does not exist");
+  assert.equal(target.dataset.battlePassMilestone, String(milestone));
+  assert.equal(target.getAttribute("aria-current"), "step");
+});
+
+Then("the battle-pass claim celebration is visible", function () {
+  const documentRef = this.dom.window.document;
+  const target = documentRef.querySelector("[data-battle-pass-milestone=\"1\"]");
+  assert.ok(target.classList.contains("battle-pass-milestone--vfx"));
+  assert.equal(target.querySelectorAll("[data-battle-pass-particle]").length, 8);
+});
+
 Then("battle-pass milestone {int} is {word}", function (milestone, state) {
   const button = this.dom.window.document.querySelector(
     `[data-battle-pass-milestone="${milestone}"]`

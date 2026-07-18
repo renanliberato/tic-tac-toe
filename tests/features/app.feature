@@ -86,10 +86,13 @@ Feature: Playing against the Computer
     Then the battle pass screen is visible
     And the battle pass shows 100 milestones
     And the battle pass progress says "2 / 100 points"
+    And the battle pass percentage says "2%"
+    And the current battle-pass target is milestone 1
     And battle-pass milestone 1 is claimable
     And battle-pass milestone 3 is locked
     When I claim battle-pass milestone 1
     Then the battle-pass announcement says "1 gold claimed from milestone 1"
+    And the battle-pass claim celebration is visible
     And battle-pass milestone 1 is claimed
     And player statistics include:
       | battle_pass_points  | 2 |

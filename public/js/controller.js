@@ -1,4 +1,5 @@
 import { getWinningLine } from "./game.js";
+import { getBattlePassCycle } from "./battle-pass.js";
 import { createOpponent } from "./identity.js";
 import {
   awardLeaderboardPoint,
@@ -57,6 +58,7 @@ export class GameController {
     this.homePresentationEnabled = true;
     this.scheduledPendingCoins = 0;
     this.startupGiftHandled = false;
+    this.pendingBattlePassVfx = null;
 
     this.model.subscribe(() => this.render());
     this.bindViewEvents();
@@ -353,9 +355,17 @@ export class GameController {
 
   showBattlePass() {
     this.view.finishCoinPresentation?.();
-    this.player = reloadPlayer(undefined, this.now());
-    this.view.renderBattlePass?.(this.player, this.now());
-    this.view.showBattlePass?.(this.player, this.now());
+    const timestamp = this.now();
+    if (this.player.battle_pass_cycle !== getBattlePassCycle(timestamp).key) {
+      this.player = reloadPlayer(undefined, timestamp);
+    }
+    this.view.renderBattlePass?.(this.player, timestamp);
+    this.view.showBattlePass?.(this.player, timestamp);
+    if (this.pendingBattlePassVfx !== null) {
+      const milestone = this.pendingBattlePassVfx;
+      this.pendingBattlePassVfx = null;
+      this.view.triggerBattlePassVfx?.(milestone);
+    }
   }
 
   leaveBattlePass() {
@@ -363,12 +373,17 @@ export class GameController {
   }
 
   claimBattlePass(milestone) {
+    const wasClaimed = Array.isArray(this.player.battle_pass_claimed)
+      && this.player.battle_pass_claimed.includes(milestone);
     const result = claimPlayerBattlePassMilestone(
       this.player, milestone, undefined, this.now()
     );
     this.player = result.player;
     this.render();
     this.view.renderBattlePass?.(this.player, this.now());
+    if (result.status === "claimed" && !wasClaimed) {
+      this.view.triggerBattlePassVfx?.(result.item.milestone);
+    }
     this.view.announceBattlePass?.(result.status === "claimed"
       ? `${result.item.reward} gold claimed from milestone ${result.item.milestone}`
       : result.status === "locked"
@@ -465,7 +480,11 @@ export class GameController {
     if (matchWinner) {
       this.player = updatePlayerAfterMatch(this.player, state.winner, undefined, this.now());
       if (state.winner === "X") {
+        const pointsBefore = this.player.battle_pass_points;
         this.player = awardPlayerBattlePassPoint(this.player, this.now());
+        if (this.player.battle_pass_points > pointsBefore) {
+          this.pendingBattlePassVfx = this.player.battle_pass_points;
+        }
         this.player = awardCoins(
           this.player,
           this.player.win_streak === 3 ? 4 : 3,
