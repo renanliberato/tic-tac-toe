@@ -134,6 +134,7 @@ main() {
     fi
 
     cd "$main_root" || return 1
+    [ -r ./task-session ] && . ./task-session
     "$main_root/git-sync" || return 1
 
     # The lock lives in the common Git directory so it is shared by the
@@ -193,13 +194,24 @@ TASK
             trap - INT TERM HUP EXIT
             return 1
         fi
-        mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt" </dev/null
+        task_session merge-conflict-resolver mswea "${DEV_FLOW_MODEL:-codex:gpt-5.6-luna@high}" --yolo --exit-immediately -t "$prompt" </dev/null
         status=$?
         if [ "$status" -eq 0 ]; then
             merge_head=$(git rev-parse --git-path MERGE_HEAD)
             if [ -f "$merge_head" ] || [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
                 printf '%s\n' 'git-worktree-merge: conflict resolver did not complete the merge' >&2
                 status=1
+            elif task_session_enabled; then
+                # This transcript is created in the primary checkout after
+                # the branch merge. Fold it into the merge result instead of
+                # leaving a post-merge observability-only change behind.
+                git add -- "tasks/${DEV_FLOW_TASK_ID}"-session-merge-conflict-resolver* || status=1
+                if [ "$status" -eq 0 ] && ! git diff --cached --quiet; then
+                    git commit --amend --no-edit >/dev/null || status=1
+                fi
+                if [ "$status" -eq 0 ] && ! cleanup_worktree; then
+                    status=1
+                fi
             elif ! cleanup_worktree; then
                 status=1
             fi
