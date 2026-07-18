@@ -22,12 +22,14 @@ function createRepository() {
   runGit(main, "config", "user.email", "test@example.com");
   runGit(main, "config", "user.name", "Worktree Test");
   writeFileSync(path.join(main, "README"), "base\n");
-  for (const script of ["git-sync", "git-worktree-merge"]) {
+  mkdirSync(path.join(main, "tasks"));
+  writeFileSync(path.join(main, "tasks", ".gitkeep"), "");
+  for (const script of ["git-sync", "git-worktree-merge", "task-session"]) {
     const target = path.join(main, script);
     writeFileSync(target, readFileSync(path.join(repositoryRoot, script), "utf8"));
     chmodSync(target, 0o755);
   }
-  runGit(main, "add", "README", "git-sync", "git-worktree-merge");
+  runGit(main, "add", "README", "git-sync", "git-worktree-merge", "task-session", "tasks/.gitkeep");
   runGit(main, "commit", "--quiet", "-m", "base");
   runGit(main, "branch", "-M", "main");
   runGit(main, "remote", "add", "origin", remote);
@@ -69,6 +71,42 @@ describe("git-worktree-merge", () => {
     expect(worktreeCount(repository)).toBe(1);
     expect(() => runGit(repository, "show-ref", "--verify", "refs/heads/abc123")).toThrow();
     expect(readFileSync(path.join(repository, "README"), "utf8")).toBe("base\nchange\n");
+  }, 30000);
+
+  it("folds a primary-sync conflict transcript into the merge without a path collision", () => {
+    const repository = createRepository();
+    writeFileSync(path.join(repository, "git-sync"), `#!/bin/sh
+printf 'primary sync conflict transcript\n' > "tasks/$DEV_FLOW_TASK_ID-session-sync-conflict-resolver.md"
+`);
+    chmodSync(path.join(repository, "git-sync"), 0o755);
+    runGit(repository, "add", "git-sync");
+    runGit(repository, "commit", "--quiet", "-m", "simulate primary sync conflict");
+
+    const worktreeParent = path.join(repository, ".worktrees");
+    const worktree = path.join(worktreeParent, "abc123");
+    mkdirSync(worktreeParent);
+    runGit(repository, "worktree", "add", "--quiet", "-b", "abc123", worktree);
+    const branchTranscript = path.join(worktree, "tasks", "abc123-session-sync-conflict-resolver.md");
+    writeFileSync(branchTranscript, "worktree sync conflict transcript\n");
+    runGit(worktree, "add", branchTranscript);
+    runGit(worktree, "commit", "--quiet", "-m", "record worktree sync conflict");
+
+    const result = spawnSync("./git-worktree-merge", {
+      cwd: worktree,
+      encoding: "utf8",
+      env: { ...env, DEV_FLOW_TASK_ID: "abc123" }
+    });
+
+    const firstAttempt = path.join(repository, "tasks", "abc123-session-sync-conflict-resolver-01.md");
+    const secondAttempt = path.join(repository, "tasks", "abc123-session-sync-conflict-resolver-02.md");
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(worktree)).toBe(false);
+    expect(existsSync(path.join(repository, "tasks", "abc123-session-sync-conflict-resolver.md"))).toBe(false);
+    expect(readFileSync(firstAttempt, "utf8")).toContain("worktree sync conflict transcript");
+    expect(readFileSync(secondAttempt, "utf8")).toContain("primary sync conflict transcript");
+    expect(runGit(repository, "ls-files", "tasks")).toContain("tasks/abc123-session-sync-conflict-resolver-01.md");
+    expect(runGit(repository, "ls-files", "tasks")).toContain("tasks/abc123-session-sync-conflict-resolver-02.md");
+    expect(runGit(repository, "status", "--porcelain")).toBe("");
   }, 30000);
 
   it("waits for the merge lock after synchronization", () => {
