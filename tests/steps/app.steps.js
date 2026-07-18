@@ -477,6 +477,25 @@ Then("the leaderboard screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#leaderboard-screen").hidden, false);
 });
 
+Then("battle-pass milestones form an alternating staircase with aligned connectors", function () {
+  const rows = [...this.dom.window.document.querySelectorAll("[data-battle-pass-row]")];
+  assert.equal(rows.length, 100, "The battle pass does not render 100 staircase rows");
+
+  rows.forEach((row, index) => {
+    const milestone = index + 1;
+    const side = milestone % 2 ? "left" : "right";
+    const card = row.querySelector("[data-battle-pass-milestone]");
+    const node = row.querySelector("[data-battle-pass-rail-node]");
+    const connector = row.querySelector("[data-battle-pass-connector]");
+
+    assert.equal(row.dataset.battlePassSide, side, `Milestone ${milestone} is on the wrong side`);
+    assert.equal(card?.dataset.battlePassMilestone, String(milestone));
+    assert.equal(node?.dataset.battlePassRailNode, String(milestone));
+    assert.equal(connector?.dataset.battlePassConnector, String(milestone));
+    assert.ok(connector.classList.contains(`battle-pass-connector--${side}`));
+  });
+});
+
 Then("the battle pass screen is visible", function () {
   assert.equal(this.dom.window.document.querySelector("#battle-pass-screen").hidden, false);
 });

@@ -946,7 +946,7 @@ export class GameView {
 
     const content = this.document.createElement("div");
     content.className = "battle-pass-scroll-content";
-    const rail = this.document.createElement("div");
+    const rail = this.document.createElement("span");
     rail.className = `battle-pass-rail${complete ? " battle-pass-rail--complete" : ""}`;
     rail.dataset.battlePassRail = "";
     rail.setAttribute("aria-hidden", "true");
@@ -957,18 +957,21 @@ export class GameView {
     railFill.dataset.battlePassProgressFill = "";
     railFill.setAttribute("aria-hidden", "true");
     rail.append(railFill);
-    const cards = this.document.createElement("div");
-    cards.className = "battle-pass-cards";
 
     BATTLE_PASS_MILESTONES.forEach((item, index) => {
       const reached = points >= item.points;
       const isClaimed = claimed.has(item.milestone);
       const isTarget = target?.milestone === item.milestone;
+      const side = item.milestone % 2 ? "left" : "right";
+      const state = isClaimed ? "claimed" : reached ? "available" : "locked";
+      const row = this.document.createElement("div");
+      row.className = `battle-pass-row battle-pass-row--${side}`;
+      row.dataset.battlePassRow = String(item.milestone);
+      row.dataset.battlePassSide = side;
       const button = this.document.createElement("button");
       button.type = "button";
-      button.className = `battle-pass-milestone battle-pass-milestone--${
-        isClaimed ? "claimed" : reached ? "available" : "locked"
-      }${isTarget ? " battle-pass-milestone--current" : ""}`;
+      button.className = `battle-pass-milestone battle-pass-milestone--${state}${
+        isTarget ? " battle-pass-milestone--current" : ""}`;
       button.dataset.battlePassMilestone = String(item.milestone);
       if (isTarget) {
         button.dataset.battlePassTarget = "true";
@@ -1002,19 +1005,29 @@ export class GameView {
       action.className = "battle-pass-milestone__action";
       action.textContent = isClaimed ? "Claimed" : reached ? "Claim" : "Locked";
       button.append(level, requirement, reward, action);
-      cards.append(button);
 
       const node = this.document.createElement("span");
       node.className = `battle-pass-rail__node${
         reached ? " battle-pass-rail__node--filled" : ""
-      }${isTarget ? " battle-pass-rail__node--target" : ""}`;
+      }${isTarget ? " battle-pass-rail__node--target" : ""}${
+        complete ? " battle-pass-rail__node--complete" : ""
+      }`;
       node.dataset.battlePassRailNode = String(item.milestone);
       node.style.setProperty("--battle-pass-node-index", String(index));
       node.setAttribute("aria-hidden", "true");
       node.setAttribute("role", "presentation");
-      rail.append(node);
+
+      const connector = this.document.createElement("span");
+      connector.className = `battle-pass-connector battle-pass-connector--${side} battle-pass-connector--${state}${
+        isTarget ? " battle-pass-connector--target" : ""
+      }${complete ? " battle-pass-connector--complete" : ""}`;
+      connector.dataset.battlePassConnector = String(item.milestone);
+      connector.setAttribute("aria-hidden", "true");
+      connector.setAttribute("role", "presentation");
+      row.append(button, connector, node);
+      content.append(row);
     });
-    content.append(rail, cards);
+    content.prepend(rail);
     this.battlePassList.replaceChildren(content);
     if (!this.battlePassHasRendered) {
       this.battlePassList.classList.remove("battle-pass-list--entering");

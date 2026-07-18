@@ -220,6 +220,35 @@ describe("battle pass screen", () => {
     expect(dom.window.document.querySelector("[data-battle-pass-target]")).toBeNull();
   });
 
+  it("renders each milestone in an aligned, alternating staircase row with a connector", () => {
+    const html = readFileSyncForBattlePass();
+    dom.window.document.documentElement.innerHTML = html
+      .match(/<body>([\s\S]*)<\/body>/)[1];
+    const view = new GameView(dom.window.document, () => JULY_RESET);
+    view.renderBattlePass({ battle_pass_points: 3, battle_pass_claimed: [1, 2, 3] }, JULY_RESET);
+
+    const rows = dom.window.document.querySelectorAll("[data-battle-pass-row]");
+    expect(rows).toHaveLength(100);
+    rows.forEach((row, index) => {
+      const milestone = index + 1;
+      expect(row.dataset.battlePassSide).toBe(milestone % 2 ? "left" : "right");
+      expect(row.querySelector("[data-battle-pass-milestone]").dataset.battlePassMilestone)
+        .toBe(String(milestone));
+      expect(row.querySelector("[data-battle-pass-rail-node]").dataset.battlePassRailNode)
+        .toBe(String(milestone));
+      expect(row.querySelector("[data-battle-pass-connector]").dataset.battlePassConnector)
+        .toBe(String(milestone));
+    });
+    expect(rows[0].querySelector("[data-battle-pass-connector]").className)
+      .toContain("battle-pass-connector--claimed");
+    expect(rows[3].querySelector("[data-battle-pass-connector]").className)
+      .toContain("battle-pass-connector--target");
+
+    view.renderBattlePass({ battle_pass_points: 100, battle_pass_claimed: [] }, JULY_RESET);
+    expect(dom.window.document.querySelectorAll(".battle-pass-connector--complete")).toHaveLength(100);
+    expect(dom.window.document.querySelectorAll(".battle-pass-rail__node--complete")).toHaveLength(100);
+  });
+
   it("centers the current target and disables smooth scrolling for reduced motion", () => {
     const html = readFileSyncForBattlePass();
     dom.window.document.documentElement.innerHTML = html

@@ -91,6 +91,7 @@ Feature: Playing against the Computer
     When I open the battle pass
     Then the battle pass screen is visible
     And the battle pass shows 100 milestones
+    And battle-pass milestones form an alternating staircase with aligned connectors
     And the battle pass progress says "2 / 100 points"
     And the battle pass percentage says "2%"
     And the current battle-pass target is milestone 1
