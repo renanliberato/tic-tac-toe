@@ -75,17 +75,24 @@ fold_primary_sync_transcript() {
     base="tasks/${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver"
     # Match task-session's repeat convention: promote an existing unsuffixed
     # transcript before assigning the reserved primary-sync attempt its suffix.
+    # Gaps in prior attempts must not let either move overwrite a transcript.
     existing_count=$(find tasks -type f -name "${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver-[0-9][0-9].md" | wc -l | tr -d ' ')
     if [ -f "${base}.md" ]; then
-        suffix=$(printf '%02d' "$((existing_count + 1))")
-        mv -- "${base}.md" "${base}-${suffix}.md" || return 1
+        suffix=$((existing_count + 1))
+        while [ -e "${base}-$(printf '%02d' "$suffix").md" ]; do
+            suffix=$((suffix + 1))
+        done
+        mv -- "${base}.md" "${base}-$(printf '%02d' "$suffix").md" || return 1
         existing_count=$((existing_count + 1))
     fi
     if [ "$existing_count" -eq 0 ]; then
         destination="${base}.md"
     else
-        suffix=$(printf '%02d' "$((existing_count + 1))")
-        destination="${base}-${suffix}.md"
+        suffix=$((existing_count + 1))
+        while [ -e "${base}-$(printf '%02d' "$suffix").md" ]; do
+            suffix=$((suffix + 1))
+        done
+        destination="${base}-$(printf '%02d' "$suffix").md"
     fi
     mv -- "$primary_sync_transcript_reserve" "$destination" || return 1
     primary_sync_transcript_reserve=''
@@ -94,6 +101,11 @@ fold_primary_sync_transcript() {
     if ! git diff --cached --quiet; then
         git commit --amend --no-edit > /dev/null || return 1
     fi
+}
+
+cleanup_merge() {
+    restore_primary_sync_transcript || :
+    release_lock
 }
 
 cleanup_worktree() {
@@ -178,12 +190,17 @@ main() {
     primary_sync_transcript=''
     primary_sync_transcript_reserve=''
     if command -v task_session_enabled > /dev/null 2>&1 && task_session_enabled; then
+        # task_session may rotate an existing unsuffixed transcript to -01
+        # before writing a new -02 transcript. Record every artifact's inode,
+        # rather than its path: mv preserves an old artifact's inode while the
+        # newly generated transcript has a new one.
         primary_sync_snapshot=$(mktemp "${TMPDIR:-/tmp}/git-worktree-merge-${DEV_FLOW_TASK_ID}.XXXXXX") || return 1
-        git ls-files --others --exclude-standard -- \
-            "tasks/${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver"*.md > "$primary_sync_snapshot" || {
-            rm -f "$primary_sync_snapshot"
-            return 1
-        }
+        for transcript in $(find tasks -type f -name "${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver*.md"); do
+            ls -di "$transcript" | awk '{ print $1 }' >> "$primary_sync_snapshot" || {
+                rm -f "$primary_sync_snapshot"
+                return 1
+            }
+        done
     fi
     if "$main_root/git-sync"; then
         :
@@ -193,9 +210,12 @@ main() {
         return "$status"
     fi
     if [ -n "$primary_sync_snapshot" ]; then
-        for transcript in $(git ls-files --others --exclude-standard -- \
-            "tasks/${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver"*.md); do
-            if ! grep -F -x -- "$transcript" "$primary_sync_snapshot" > /dev/null; then
+        for transcript in $(find tasks -type f -name "${DEV_FLOW_TASK_ID}-session-sync-conflict-resolver*.md"); do
+            primary_sync_transcript_inode=$(ls -di "$transcript" | awk '{ print $1 }') || {
+                rm -f "$primary_sync_snapshot"
+                return 1
+            }
+            if ! grep -F -x -- "$primary_sync_transcript_inode" "$primary_sync_snapshot" > /dev/null; then
                 primary_sync_transcript=$transcript
                 break
             fi
@@ -221,32 +241,30 @@ main() {
         if [ "$status" -eq 1 ]; then
             printf '%s\n' 'git-worktree-merge: could not locate the common Git directory' >&2
         fi
-        restore_primary_sync_transcript || :
+        cleanup_merge
         return "$status"
     fi
-    trap release_lock INT TERM HUP EXIT
+    trap cleanup_merge INT TERM HUP EXIT
 
     if ! git fetch origin "$worktree_branch"; then
-        restore_primary_sync_transcript || :
-        release_lock
+        cleanup_merge
         trap - INT TERM HUP EXIT
         return 1
     fi
 
     if git merge --no-edit "origin/$worktree_branch"; then
         if ! fold_primary_sync_transcript; then
-            restore_primary_sync_transcript || :
-            release_lock
+            cleanup_merge
             trap - INT TERM HUP EXIT
             return 1
         fi
         if ! cleanup_worktree; then
-            release_lock
+            cleanup_merge
             trap - INT TERM HUP EXIT
             return 1
         fi
         printf 'Merged worktree branch %s into %s and removed the worktree\n' "$worktree_branch" "$(git branch --show-current)"
-        release_lock
+        cleanup_merge
         trap - INT TERM HUP EXIT
         return 0
     fi
@@ -254,9 +272,8 @@ main() {
     merge_head=$(git rev-parse --git-path MERGE_HEAD)
     if [ -f "$merge_head" ] || [ -n "$(git ls-files --unmerged 2>/dev/null)" ]; then
         if ! git merge --abort; then
-            restore_primary_sync_transcript || :
             printf '%s\n' 'git-worktree-merge: could not abort the conflicted merge' >&2
-            release_lock
+            cleanup_merge
             trap - INT TERM HUP EXIT
             return 1
         fi
@@ -271,7 +288,7 @@ TASK
 )
         if ! command -v mswea >/dev/null 2>&1; then
             printf '%s\n' 'git-worktree-merge: mswea is required to resolve merge conflicts' >&2
-            release_lock
+            cleanup_merge
             trap - INT TERM HUP EXIT
             return 1
         fi
@@ -304,17 +321,13 @@ TASK
                 status=1
             fi
         fi
-        if [ "$status" -ne 0 ]; then
-            restore_primary_sync_transcript || :
-        fi
-        release_lock
+        cleanup_merge
         trap - INT TERM HUP EXIT
         return "$status"
     fi
 
-    restore_primary_sync_transcript || :
     printf '%s\n' 'git-worktree-merge: git merge failed without leaving a conflict to resolve' >&2
-    release_lock
+    cleanup_merge
     trap - INT TERM HUP EXIT
     return 1
 }
