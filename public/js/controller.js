@@ -542,7 +542,7 @@ export class GameController {
     const matchWinner = state.winner && this.matchScore[state.winner] >= MATCH_POINTS_TO_WIN;
     this.resultRecorded = true;
     if (!matchWinner) { this.render(); return; }
-    const result = commitFloorIsLavaResult(this.player, this.eventMatch, state.winner === "X" ? "win" : "loss", undefined, this.now(), stats);
+    const result = commitFloorIsLavaResult(this.player, this.eventMatch, state.winner === "X" ? "win" : "loss", undefined, this.now(), { ...stats, rounds: stats.games });
     this.player = result.player;
     if (!result.accepted) {
       // Another tab won the race: abandon every buffered result and reconcile.

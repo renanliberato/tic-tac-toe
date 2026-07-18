@@ -104,6 +104,7 @@ class FloorIsLavaViewStub {
   showGame() { this.floorIsLavaOpen = false; this.gameVisible = true; }
   focusFirstCell() {}
   closeResultDialog() {}
+  resetFeedback() {}
   finishCoinPresentation() {}
   replayMove() {}
 }
@@ -138,6 +139,37 @@ describe("Floor Is Lava controller and view", () => {
     controller.play(0);
     expect(controller.eventRoundStats).toMatchObject({ games: 1, moves: 1, last_move: { cell: 0, mark: "X" } });
     expect(controller.player.moves_played).toBe(0);
+  });
+
+  it("persists every completed round when an event match ends", () => {
+    const store = storage();
+    const previousStorage = globalThis.localStorage;
+    const timestamp = at(8).getTime();
+    const timers = {
+      now: () => timestamp,
+      setInterval: () => 1,
+      clearInterval() {},
+      setTimeout: () => 2,
+      clearTimeout() {}
+    };
+    globalThis.localStorage = store;
+
+    try {
+      const controller = new GameController(new GameModel(), new FloorIsLavaViewStub(), timers, () => 0);
+      expect(controller.startFloorIsLavaMatch()).toBe(true);
+
+      controller.recordResult({ winner: "X", draw: false });
+      controller.startNextRound(controller.roundId);
+      controller.recordResult({ winner: "X", draw: false });
+      controller.startNextRound(controller.roundId);
+      controller.recordResult({ winner: "X", draw: false });
+
+      expect(controller.player.games_played).toBe(3);
+      expect(JSON.parse(store.getItem(PLAYER_STORAGE_KEY)).games_played).toBe(3);
+    } finally {
+      if (previousStorage === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = previousStorage;
+    }
   });
 
   it("renders the active climb, local position, and next-stage action", () => {

@@ -624,6 +624,12 @@ When("I choose the {string} style", function (name) {
   this.lastStyleTile = tile;
 });
 
+Then("the profile shows {int} games played", function (games) {
+  const document = this.dom.window.document;
+  assert.equal(document.querySelector("#profile-screen").hidden, false);
+  assert.equal(document.querySelector("[data-stat=\"games_played\"]").textContent, String(games));
+});
+
 Then("the profile screen shows my match statistics", function () {
   const document = this.dom.window.document;
   assert.equal(document.querySelector("#profile-screen").hidden, false);

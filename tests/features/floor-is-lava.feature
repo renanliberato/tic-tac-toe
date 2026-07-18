@@ -36,3 +36,5 @@ Feature: Floor Is Lava daily climb
     And the Floor Is Lava attempt has 1 win and active status
     When I return from Floor Is Lava
     Then the home screen is visible
+    When I open my profile
+    Then the profile shows 3 games played
